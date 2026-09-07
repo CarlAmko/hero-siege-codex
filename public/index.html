@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hero Siege Economy Codex & Price Check Tool</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0c10;
+      --bg-secondary: #12161f;
+      --bg-card: #181d28;
+      --bg-hover: #222938;
+      --border-color: #2b3345;
+      --border-accent: #3f4a63;
+      
+      --text-main: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+
+      --tier-ss: #f43f5e;
+      --tier-s: #f59e0b;
+      --tier-a: #3b82f6;
+      --tier-trash: #64748b;
+
+      --rarity-angelic: #fbbf24;
+      --rarity-unholy: #a855f7;
+      --rarity-heroic: #06b6d4;
+      --rarity-satanic: #ef4444;
+      --rarity-set: #10b981;
+      --rarity-relic: #f97316;
+
+      --font-display: 'Cinzel', serif;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #ef4444, #7f1d1d);
+      border: 1px solid #f87171;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.35);
+    }
+
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      color: #fff;
+      background: linear-gradient(to right, #fff, #cbd5e1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .header-badges {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .badge-pill {
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+
+    /* Navigation Tabs */
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+
+    .nav-tab {
+      padding: 10px 18px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .nav-tab:hover {
+      color: #fff;
+      background: var(--bg-hover);
+      border-radius: 6px 6px 0 0;
+    }
+
+    .nav-tab.active {
+      color: #f87171;
+      border-bottom-color: #ef4444;
+      background: var(--bg-secondary);
+      border-radius: 6px 6px 0 0;
+    }
+
+    /* Tab Panes */
+    .tab-pane {
+      display: none;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    /* Layout Grids */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 960px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Card */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    .card-title {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      color: #fff;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Inputs */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-family: var(--font-body);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+    }
+
+    .search-wrapper {
+      position: relative;
+    }
+
+    .autocomplete-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-accent);
+      border-radius: 8px;
+      max-height: 280px;
+      overflow-y: auto;
+      z-index: 50;
+      margin-top: 4px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      display: none;
+    }
+
+    .autocomplete-item {
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border-color);
+      transition: background 0.1s;
+    }
+
+    .autocomplete-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .chips-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .chip {
+      padding: 4px 10px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+
+    .chip:hover {
+      color: #fff;
+      border-color: #ef4444;
+      background: var(--bg-hover);
+    }
+
+    /* Verdict Banner */
+    .verdict-banner {
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border: 1px solid;
+    }
+
+    .verdict-banner.banner-danger {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: #ef4444;
+    }
+
+    .verdict-banner.banner-warning {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: #f59e0b;
+    }
+
+    .verdict-banner.banner-info {
+      background: rgba(59, 130, 246, 0.12);
+      border-color: #3b82f6;
+    }
+
+    .verdict-banner.banner-secondary {
+      background: rgba(100, 116, 139, 0.12);
+      border-color: #64748b;
+    }
+
+    .verdict-main {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .verdict-icon {
+      font-size: 32px;
+    }
+
+    .verdict-title {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+    }
+
+    .verdict-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .score-badge {
+      font-family: var(--font-mono);
+      font-size: 1.4rem;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Checklist & Sections */
+    .section-title {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .checklist-list, .reasons-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .checklist-item {
+      background: var(--bg-secondary);
+      border-left: 3px solid #f59e0b;
+      padding: 8px 12px;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.88rem;
+    }
+
+    .reason-item {
+      background: var(--bg-secondary);
+      border-left: 3px solid #ef4444;
+      padding: 8px 12px;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.88rem;
+    }
+
+    .affixes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .affix-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      font-family: var(--font-mono);
+      color: #38bdf8;
+    }
+
+    /* Item Explorer Table */
+    .table-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: var(--bg-secondary);
+      max-height: 600px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.88rem;
+    }
+
+    th {
+      background: var(--bg-card);
+      padding: 12px 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-main);
+    }
+
+    tr:hover td {
+      background: var(--bg-hover);
+      cursor: pointer;
+    }
+
+    /* Badges */
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-family: var(--font-mono);
+    }
+
+    .tag-angelic { background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 1px solid #fbbf24; }
+    .tag-unholy { background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid #a855f7; }
+    .tag-heroic { background: rgba(6, 182, 212, 0.2); color: #22d3ee; border: 1px solid #06b6d4; }
+    .tag-satanic { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
+    .tag-set { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #10b981; }
+    .tag-relic { background: rgba(249, 115, 22, 0.2); color: #fb923c; border: 1px solid #f97316; }
+
+    .tag-ss { background: #ef4444; color: #fff; }
+    .tag-s { background: #f59e0b; color: #000; }
+    .tag-a { background: #3b82f6; color: #fff; }
+    .tag-b { background: #64748b; color: #fff; }
+
+    /* Guide Articles */
+    .guide-card {
+      margin-bottom: 20px;
+    }
+
+    .guide-card h3 {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      color: #f87171;
+      margin-bottom: 10px;
+    }
+
+    .guide-card p, .guide-card ul {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      margin-bottom: 12px;
+    }
+
+    .guide-card ul {
+      padding-left: 20px;
+    }
+
+    .guide-card li {
+      margin-bottom: 6px;
+    }
+
+    /* Slider value */
+    .range-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .range-value {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 0.95rem;
+      min-width: 50px;
+      color: #f87171;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <div class="brand-icon">⚔️</div>
+        <div>
+          <h1 class="brand-title">Hero Siege Economy Codex</h1>
+          <div class="brand-subtitle">Fast Item Price-Check & Loot Triage Tool</div>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="badge-pill">Season 10+ Meta</span>
+        <span class="badge-pill" id="totalItemsBadge">1,250+ Items Indexed</span>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="triage">🎯 Triage & Price Check</button>
+      <button class="nav-tab" data-tab="explorer">📖 Satanic+ Codex & Database</button>
+      <button class="nav-tab" data-tab="runes">💎 Runes & Runewords</button>
+      <button class="nav-tab" data-tab="guide">⚖️ Economy Rules & Cheat Sheet</button>
+    </div>
+
+    <!-- TAB 1: Triage & Price Check -->
+    <div class="tab-pane active" id="tab-triage">
+      <div class="grid-2">
+        <!-- Input Column -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">🔍 Item Drop Inspector</h2>
+          </div>
+
+          <div class="form-group search-wrapper">
+            <label class="form-label">Search Item Name, Unique, or Rune</label>
+            <input type="text" id="triageInput" class="form-input" placeholder="e.g. Lucifer's Crown, The Bucket, Harlequinn, Jah..." autocomplete="off">
+            <div id="autocompleteList" class="autocomplete-list"></div>
+            
+            <div class="chips-row">
+              <span class="chip" data-name="Lucifer's Crown">👑 Lucifer's Crown</span>
+              <span class="chip" data-name="The Bucket">🪣 The Bucket</span>
+              <span class="chip" data-name="Harlequinn's Crest">🎭 Harlequinn's Crest</span>
+              <span class="chip" data-name="Gut's HFS">⚔️ Gut's HFS</span>
+              <span class="chip" data-name="Jah">💎 Jah Rune</span>
+              <span class="chip" data-name="Fawn">💎 Fawn Rune</span>
+              <span class="chip" data-name="Steve's Mighty Sword">🗡️ Steve's Set</span>
+            </div>
+          </div>
+
+          <div class="grid-2" style="gap: 16px; margin-top: 16px;">
+            <div class="form-group">
+              <label class="form-label">Quality % (Satanic Dice)</label>
+              <div class="range-wrapper">
+                <input type="range" id="qualityRange" min="50" max="115" value="100" class="form-input" style="padding: 0;">
+                <span id="qualityVal" class="range-value">100%</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Sockets Rolled</label>
+              <select id="socketsSelect" class="form-select">
+                <option value="default">Default / Unspecified</option>
+                <option value="0">0 Sockets</option>
+                <option value="1">1 Socket</option>
+                <option value="2">2 Sockets</option>
+                <option value="3">3 Sockets (Max for 1H/Armor/Helm)</option>
+                <option value="4">4 Sockets</option>
+                <option value="5">5 Sockets</option>
+                <option value="6">6 Sockets (Max for 2H Weapon)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 8px;">
+            <label class="form-label">Season Economy Phase</label>
+            <select id="seasonSelect" class="form-select">
+              <option value="mid" selected>Mid Season (Standard Meta)</option>
+              <option value="early">Early Season (Week 1-2: MF & Leveling Spikes)</option>
+              <option value="late">Late Season (Only SS / 115% Rolls Trade)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Result Column -->
+        <div class="card" id="evaluationCard">
+          <div class="card-header">
+            <h2 class="card-title">📊 Valuation Result</h2>
+            <span id="evalRarityBadge" class="tag tag-satanic">SATANIC</span>
+          </div>
+
+          <!-- Verdict Banner -->
+          <div class="verdict-banner banner-danger" id="verdictBanner">
+            <div class="verdict-main">
+              <span class="verdict-icon" id="verdictIcon">🔴</span>
+              <div>
+                <div class="verdict-title" id="verdictTitle">ALWAYS PRICE CHECK</div>
+                <div class="verdict-subtitle" id="verdictSubtitle">Keep & Price Check on Marketplace immediately.</div>
+              </div>
+            </div>
+            <div class="score-badge" id="scoreBadge">95/100</div>
+          </div>
+
+          <!-- Bracket & Slot Meta -->
+          <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+            <div class="badge-pill" id="bracketBadge">Bracket: Ultra High</div>
+            <div class="badge-pill" id="slotBadge">Slot: Helmet</div>
+            <div class="badge-pill" id="levelReqBadge">Req Lvl: 100</div>
+            <div class="badge-pill" id="gradeBadge">Grade: SS</div>
+          </div>
+
+          <!-- Reasons -->
+          <div class="section-title">💡 Why this rating:</div>
+          <ul class="reasons-list" id="reasonsList">
+            <li class="reason-item">Angelic rarity: Ultra-rare endgame drop with extreme market demand.</li>
+          </ul>
+
+          <!-- Checklist -->
+          <div class="section-title">🔍 Checklist & Roll Targets:</div>
+          <ul class="checklist-list" id="checklistList">
+            <li class="checklist-item">Check current listings on Bazaar / Discord; prices often reach high rune / gold caps.</li>
+          </ul>
+
+          <!-- Key Affixes -->
+          <div class="section-title">⚡ Notable Implicits / Affixes:</div>
+          <div class="affixes-grid" id="affixesGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Item Codex & Explorer -->
+    <div class="tab-pane" id="tab-explorer">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">📖 Satanic+ Item Database</h2>
+        </div>
+
+        <div class="table-controls">
+          <input type="text" id="explorerSearch" class="form-input" style="max-width: 280px;" placeholder="Filter by name...">
+          
+          <select id="filterRarity" class="form-select" style="max-width: 160px;">
+            <option value="">All Rarities</option>
+            <option value="angelic">Angelic (SS)</option>
+            <option value="unholy">Unholy (SS)</option>
+            <option value="heroic">Heroic</option>
+            <option value="satanic">Satanic</option>
+            <option value="satanic_set">Satanic Set</option>
+            <option value="relic">Relic</option>
+          </select>
+
+          <select id="filterGrade" class="form-select" style="max-width: 140px;">
+            <option value="">All Grades</option>
+            <option value="SS">Grade SS</option>
+            <option value="S">Grade S</option>
+            <option value="A">Grade A</option>
+            <option value="B">Grade B</option>
+            <option value="C">Grade C</option>
+            <option value="D">Grade D</option>
+          </select>
+
+          <select id="filterSlot" class="form-select" style="max-width: 160px;">
+            <option value="">All Slots</option>
+            <option value="weapon">Weapons</option>
+            <option value="helmet">Helmets</option>
+            <option value="armor">Body Armors</option>
+            <option value="gloves">Gloves</option>
+            <option value="boots">Boots</option>
+            <option value="belt">Belts</option>
+            <option value="amulet">Amulets</option>
+            <option value="ring">Rings</option>
+            <option value="shield">Shields</option>
+            <option value="charm">Charms</option>
+          </select>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Item Name</th>
+                <th>Rarity</th>
+                <th>Grade</th>
+                <th>Slot</th>
+                <th>Req Lvl</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody id="explorerTableBody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Runes & Runewords -->
+    <div class="tab-pane" id="tab-runes">
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">💎 Rune Hierarchy & Currency</h2>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rune</th>
+                  <th>Tier</th>
+                  <th>Classification</th>
+                  <th>Primary Stat / Utility</th>
+                </tr>
+              </thead>
+              <tbody id="runesTableBody">
+                <!-- Rendered via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">📜 High-Tier Runewords</h2>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Runeword</th>
+                  <th>Req Lvl</th>
+                  <th>Runes Required</th>
+                  <th>Base Types</th>
+                </tr>
+              </thead>
+              <tbody id="runewordsTableBody">
+                <!-- Rendered via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: Economy Guide & Rules -->
+    <div class="tab-pane" id="tab-guide">
+      <div class="card guide-card">
+        <h3>⚡ The 5-Second Triage Rule</h3>
+        <p>When grinding Hell / Satanic Zones, your inventory fills up in minutes. Use this rapid triage formula:</p>
+        <ul>
+          <li><strong>🔴 ALWAYS KEEP & PRICE CHECK:</strong> Any Angelic (Gold), Unholy (Purple), Heroic (Teal), Satanic Grade SS, or Tier 3/4 High Runes (Fawn, Flo, Jol, Nju, Sur, Ber, Jah, Zed).</li>
+          <li><strong>🟡 CONDITIONAL CHECK:</strong> Satanic Grade S and Set S pieces. Only price check if 105%+ Quality, Max Sockets, or high rolls on +All Skills / Magic Find.</li>
+          <li><strong>⚪ INSTANT DUST / PROSPECT:</strong> Satanic Grades B, C, D, low set pieces, and non-superior items. Head directly to the Blacksmith and prospect into Satanic Crystal Fragments.</li>
+        </ul>
+      </div>
+
+      <div class="grid-2">
+        <div class="card guide-card">
+          <h3>🎲 Satanic Dice & Quality Multipliers</h3>
+          <ul>
+            <li><strong>115% Quality (God Roll):</strong> 5x to 10x market value multiplier. Even A-tier uniques become valuable at 115%.</li>
+            <li><strong>110% - 114% Quality:</strong> 2x to 4x value multiplier. Highly sought after by endgame min-maxers.</li>
+            <li><strong>100% - 109% Quality:</strong> Standard baseline value for S/SS items.</li>
+            <li><strong>50% Quality (Corrupted Brick):</strong> Locks item quality at 50%. Loses 80-90% of market value.</li>
+          </ul>
+        </div>
+
+        <div class="card guide-card">
+          <h3>🎯 Sockets & Base Prerequisites</h3>
+          <ul>
+            <li><strong>2-Handed Weapons:</strong> Max 6 sockets (1.8x - 2.5x value spike).</li>
+            <li><strong>1-Handed Weapons, Armors, Helms, Shields:</strong> Max 3 sockets.</li>
+            <li><strong>0 Sockets:</strong> Requires Cube socket recipe or socket punch investment, reducing resale value.</li>
+            <li><strong>Runeword Bases:</strong> Superior white bases with 15% Enhanced Damage or Defense + max natural sockets are high-value trade goods.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Load local dataset directly or fetch from API
+    let allItems = [];
+    let runesData = [];
+    let runewordsData = [];
+
+    // Elements
+    const triageInput = document.getElementById('triageInput');
+    const autocompleteList = document.getElementById('autocompleteList');
+    const qualityRange = document.getElementById('qualityRange');
+    const qualityVal = document.getElementById('qualityVal');
+    const socketsSelect = document.getElementById('socketsSelect');
+    const seasonSelect = document.getElementById('seasonSelect');
+
+    let currentSelectedItem = null;
+
+    // Tab switcher
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        const target = document.getElementById(`tab-${tab.dataset.tab}`);
+        if (target) target.classList.add('active');
+      });
+    });
+
+    // Fetch initial data
+    async function loadData() {
+      try {
+        const [itemsRes, runesRes] = await Promise.all([
+          fetch('/api/items'),
+          fetch('/api/runes')
+        ]);
+        allItems = await itemsRes.json();
+        const rData = await runesRes.json();
+        runesData = rData.runes || [];
+        runewordsData = rData.runewords || [];
+
+        document.getElementById('totalItemsBadge').textContent = `${allItems.length} Items Indexed`;
+        
+        renderExplorerTable(allItems);
+        renderRunesTable(runesData);
+        renderRunewordsTable(runewordsData);
+
+        // Select default item (Lucifer's Crown)
+        selectItemByName("Lucifer's Crown");
+      } catch (err) {
+        console.error('Failed to load API data:', err);
+      }
+    }
+
+    function selectItemByName(name) {
+      const match = allItems.find(it => it.name.toLowerCase() === name.toLowerCase()) 
+                 || runesData.find(r => r.name.toLowerCase() === name.toLowerCase());
+      if (match) {
+        currentSelectedItem = match;
+        triageInput.value = match.name;
+        runEvaluation();
+      }
+    }
+
+    // Evaluate
+    async function runEvaluation() {
+      if (!currentSelectedItem) return;
+
+      const quality = parseInt(qualityRange.value, 10) || 100;
+      const sockVal = socketsSelect.value;
+      const sockets = sockVal === 'default' ? null : parseInt(sockVal, 10);
+      const seasonPhase = seasonSelect.value;
+
+      try {
+        const res = await fetch('/api/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item: currentSelectedItem, quality, sockets, seasonPhase })
+        });
+        const evalData = await res.json();
+        displayEvaluationResult(evalData);
+      } catch (err) {
+        console.error('Evaluation failed:', err);
+      }
+    }
+
+    function displayEvaluationResult(data) {
+      const v = data.verdict;
+      const banner = document.getElementById('verdictBanner');
+      banner.className = `verdict-banner banner-${v.badgeClass ? v.badgeClass.replace('badge-', '') : 'danger'}`;
+      
+      document.getElementById('verdictIcon').textContent = v.icon || '🔴';
+      document.getElementById('verdictTitle').textContent = v.label || 'PRICE CHECK';
+      document.getElementById('verdictSubtitle').textContent = v.action || '';
+      document.getElementById('scoreBadge').textContent = `${data.score}/100`;
+
+      document.getElementById('bracketBadge').textContent = `Bracket: ${data.estimatedBracket}`;
+      document.getElementById('slotBadge').textContent = `Slot: ${data.slot || 'Item'}`;
+      document.getElementById('levelReqBadge').textContent = `Req Lvl: ${data.item?.requiresLevel || 1}`;
+      document.getElementById('gradeBadge').textContent = `Grade: ${data.grade || 'N/A'}`;
+
+      const rarityBadge = document.getElementById('evalRarityBadge');
+      const r = (data.rarity || 'satanic').toLowerCase();
+      rarityBadge.className = `tag tag-${r === 'satanic_set' ? 'set' : r}`;
+      rarityBadge.textContent = (data.rarity || 'satanic').toUpperCase();
+
+      // Reasons
+      const reasonsList = document.getElementById('reasonsList');
+      reasonsList.innerHTML = (data.reasons || []).map(r => `<li class="reason-item">${r}</li>`).join('');
+
+      // Checklist
+      const checklistList = document.getElementById('checklistList');
+      checklistList.innerHTML = (data.checklist || []).map(c => `<li class="checklist-item">${c}</li>`).join('');
+
+      // Affixes
+      const affixesGrid = document.getElementById('affixesGrid');
+      const implicits = data.item?.implicit || {};
+      affixesGrid.innerHTML = Object.entries(implicits).map(([k, v]) => {
+        const valText = Array.isArray(v) ? `[${v[0]} - ${v[1]}]` : v;
+        const formattedKey = k.replace(/_/g, ' ');
+        return `<div class="affix-card">+${valText} ${formattedKey}</div>`;
+      }).join('');
+    }
+
+    // Input listeners
+    qualityRange.addEventListener('input', (e) => {
+      qualityVal.textContent = `${e.target.value}%`;
+      runEvaluation();
+    });
+
+    socketsSelect.addEventListener('change', runEvaluation);
+    seasonSelect.addEventListener('change', runEvaluation);
+
+    // Autocomplete
+    triageInput.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      if (!q) {
+        autocompleteList.style.display = 'none';
+        return;
+      }
+
+      const matches = allItems.filter(it => it.name.toLowerCase().includes(q)).slice(0, 8);
+      if (matches.length === 0) {
+        autocompleteList.style.display = 'none';
+        return;
+      }
+
+      autocompleteList.innerHTML = matches.map(it => `
+        <div class="autocomplete-item" data-id="${it.id}">
+          <span><strong>${it.name}</strong> <small style="color: #94a3b8">(${it.slot})</small></span>
+          <span class="tag tag-${it.rarity === 'satanic_set' ? 'set' : it.rarity}">${it.grade || it.rarity}</span>
+        </div>
+      `).join('');
+      autocompleteList.style.display = 'block';
+    });
+
+    autocompleteList.addEventListener('click', (e) => {
+      const itemEl = e.target.closest('.autocomplete-item');
+      if (itemEl) {
+        const id = itemEl.dataset.id;
+        const found = allItems.find(it => it.id === id);
+        if (found) {
+          currentSelectedItem = found;
+          triageInput.value = found.name;
+          autocompleteList.style.display = 'none';
+          runEvaluation();
+        }
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.search-wrapper')) {
+        autocompleteList.style.display = 'none';
+      }
+    });
+
+    // Chips
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        selectItemByName(chip.dataset.name);
+      });
+    });
+
+    // Explorer table render
+    function renderExplorerTable(list) {
+      const tbody = document.getElementById('explorerTableBody');
+      tbody.innerHTML = list.slice(0, 150).map(it => {
+        const isSet = it.rarity === 'satanic_set';
+        const rTag = isSet ? 'set' : (it.rarity || 'satanic');
+        const gTag = (it.grade || 'A').toLowerCase();
+        return `
+          <tr data-name="${it.name}">
+            <td><strong>${it.name}</strong></td>
+            <td><span class="tag tag-${rTag}">${it.rarity}</span></td>
+            <td><span class="tag tag-${gTag}">${it.grade || '-'}</span></td>
+            <td>${it.slot}</td>
+            <td>${it.requiresLevel || 1}</td>
+            <td>${it.grade === 'SS' || it.rarity === 'angelic' ? '🔴 Price Check' : (it.grade === 'S' ? '🟡 Conditional' : '⚪ Dust')}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.querySelectorAll('tr').forEach(row => {
+        row.addEventListener('click', () => {
+          selectItemByName(row.dataset.name);
+          document.querySelector('.nav-tab[data-tab="triage"]').click();
+        });
+      });
+    }
+
+    // Filter explorer table
+    function applyExplorerFilters() {
+      const q = document.getElementById('explorerSearch').value.toLowerCase().trim();
+      const r = document.getElementById('filterRarity').value;
+      const g = document.getElementById('filterGrade').value;
+      const s = document.getElementById('filterSlot').value;
+
+      const filtered = allItems.filter(it => {
+        if (q && !it.name.toLowerCase().includes(q)) return false;
+        if (r && it.rarity !== r) return false;
+        if (g && it.grade !== g) return false;
+        if (s && it.slot !== s) return false;
+        return true;
+      });
+
+      renderExplorerTable(filtered);
+    }
+
+    document.getElementById('explorerSearch').addEventListener('input', applyExplorerFilters);
+    document.getElementById('filterRarity').addEventListener('change', applyExplorerFilters);
+    document.getElementById('filterGrade').addEventListener('change', applyExplorerFilters);
+    document.getElementById('filterSlot').addEventListener('change', applyExplorerFilters);
+
+    // Runes table render
+    function renderRunesTable(rList) {
+      const tbody = document.getElementById('runesTableBody');
+      tbody.innerHTML = rList.map(r => {
+        let tierClass = 'tag-trash';
+        let desc = 'Low Rune (Crafting)';
+        if (r.tier >= 4) { tierClass = 'tag-ss'; desc = '🔴 Tier 4 High Currency'; }
+        else if (r.tier === 3) { tierClass = 'tag-s'; desc = '🔴 Tier 3 High Rune (Jah/Ber)'; }
+        else if (r.tier === 2) { tierClass = 'tag-a'; desc = '🟡 Tier 2 Mid Rune'; }
+
+        const statsText = Object.entries(r.stats || {}).map(([k, v]) => `+${v} ${k.replace(/_/g, ' ')}`).join(', ') || 'Rune Modifier';
+
+        return `
+          <tr>
+            <td><strong>${r.name}</strong></td>
+            <td><span class="tag ${tierClass}">Tier ${r.tier}</span></td>
+            <td>${desc}</td>
+            <td><small>${statsText}</small></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Runewords table render
+    function renderRunewordsTable(rwList) {
+      const tbody = document.getElementById('runewordsTableBody');
+      tbody.innerHTML = rwList.slice(0, 50).map(rw => {
+        const runesStr = (rw.runes || []).map(r => r.replace('rune_', '')).join(' + ');
+        const typesStr = (rw.allowedTypes || []).join(', ') || 'Any Base';
+        return `
+          <tr>
+            <td><strong>${rw.name}</strong></td>
+            <td>${rw.requiredLevel || 1}</td>
+            <td><code style="color: #f87171">${runesStr}</code></td>
+            <td><small>${typesStr}</small></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

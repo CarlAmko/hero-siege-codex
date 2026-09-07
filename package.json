@@ -1,0 +1,29 @@
+{
+  "name": "hero-siege-codex",
+  "version": "1.0.0",
+  "description": "Hero Siege Economy & Fast Item Price-Check Triage Tool",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "hs-economy": "./bin/hs-economy.js"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node bin/hs-economy.js check",
+    "search": "node bin/hs-economy.js search",
+    "tierlist": "node bin/hs-economy.js tierlist",
+    "triage": "node bin/hs-economy.js triage",
+    "test": "node test/engine.test.js"
+  },
+  "keywords": [
+    "hero-siege",
+    "arpg",
+    "economy",
+    "price-checker",
+    "loot-filter",
+    "satanics",
+    "uniques"
+  ],
+  "author": "Hero Siege Community",
+  "license": "MIT"
+}
