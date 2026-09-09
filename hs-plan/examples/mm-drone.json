@@ -1,0 +1,25 @@
+{
+  "classId": "marksman",
+  "level": 60,
+  "allocatedAttrs": { "strength": 20, "dexterity": 60, "intelligence": 0 },
+  "skillRanks": {
+    "gunner_drone": 20,
+    "turret_mastery": 10,
+    "arrow_turret": 10,
+    "cannon_turret": 5
+  },
+  "subskillRanks": {},
+  "mainSkillId": "gunner_drone",
+  "activeSkillIds": ["gunner_drone"],
+  "allocatedTreeNodes": [],
+  "inventory": {
+    "weapon": {
+      "baseId": "base_bow_gothic_bow",
+      "affixes": [
+        { "affixId": "enhanced_damage", "roll": 1.0 },
+        { "affixId": "increased_attack_speed", "roll": 1.0 }
+      ]
+    }
+  },
+  "season": "s10"
+}

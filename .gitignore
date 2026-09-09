@@ -1,0 +1,14 @@
+# Vendored reference repositories (read-only clones)
+refs/
+
+# Rust
+target/
+**/*.rs.bk
+
+# Node
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
