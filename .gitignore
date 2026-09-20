@@ -12,3 +12,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+
+# Generated social-signal corpus (ingested Discord rows)
+data/social-signals.jsonl
+data/social-signals.jsonl.*

@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { items, runes, runewords, sets, searchItems, findItem } from './database.js';
 import { evaluateItem } from './engine.js';
+import { DEFAULT_CORPUS, loadSignals } from './social-source.js';
+import { querySignals, summarizeCorpus } from './social.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,6 +78,34 @@ const server = createServer((req, res) => {
   if (pathname === '/api/runes' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ runes, runewords, sets }));
+    return;
+  }
+
+  // API: Social signals (Discord trade/price-check corpus)
+  if ((pathname === '/api/social/query' || pathname === '/api/social/summary') && req.method === 'GET') {
+    const corpus = process.env.HS_SOCIAL_CORPUS || DEFAULT_CORPUS;
+    if (!existsSync(corpus)) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: `no social corpus at ${corpus}`,
+          hint: 'ingest with: node bin/hs-social.js ingest --channel <id>=<label>',
+          corpus,
+        }),
+      );
+      return;
+    }
+
+    const rows = loadSignals(corpus);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    if (pathname === '/api/social/summary') {
+      res.end(JSON.stringify(summarizeCorpus(rows)));
+      return;
+    }
+    const limit = Number(url.searchParams.get('limit'));
+    res.end(
+      JSON.stringify(querySignals(rows, url.searchParams.get('q') || '', limit > 0 ? { limit } : {})),
+    );
     return;
   }
 

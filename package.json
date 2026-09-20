@@ -5,7 +5,9 @@
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "hs-economy": "./bin/hs-economy.js"
+    "hs-economy": "./bin/hs-economy.js",
+    "hs-social": "./bin/hs-social.js",
+    "hs-social-mcp": "./bin/hs-social-mcp.js"
   },
   "scripts": {
     "start": "node src/server.js",
@@ -13,7 +15,10 @@
     "search": "node bin/hs-economy.js search",
     "tierlist": "node bin/hs-economy.js tierlist",
     "triage": "node bin/hs-economy.js triage",
-    "test": "node test/engine.test.js"
+    "social": "node bin/hs-social.js",
+    "social:ingest": "node bin/hs-social.js ingest",
+    "social:mcp": "node bin/hs-social-mcp.js",
+    "test": "node --test test/*.test.js"
   },
   "keywords": [
     "hero-siege",
