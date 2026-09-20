@@ -16,5 +16,6 @@ pub mod skill_cost;
 pub mod star_scaling;
 pub mod stats;
 pub mod subskill;
+pub mod tooltip_parse;
 pub mod tree;
 pub mod types;
