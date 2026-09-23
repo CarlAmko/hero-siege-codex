@@ -1,0 +1,3 @@
+[submodule "refs/hs-tracker"]
+	path = refs/hs-tracker
+	url = https://github.com/Parazeya/hs-tracker.git
