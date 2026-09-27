@@ -8,6 +8,11 @@ target/
 # Node
 node_modules/
 
+# Local secrets (Discord session token for hs-social)
+.env
+.env.*
+!.env.example
+
 # OS / editor noise
 .DS_Store
 Thumbs.db
