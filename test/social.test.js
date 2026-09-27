@@ -31,6 +31,7 @@ import {
   readClientTokens,
   resolveToken,
   searchGuildMessages,
+  writeSnapshot,
 } from '../src/social-source.js';
 
 const CORPUS = 'trade';
@@ -222,6 +223,29 @@ test('loadSignals tolerates a missing corpus and a torn write', () => {
     const path = join(dir, 'signals.jsonl');
     writeFileSync(path, `${JSON.stringify(corpus[0])}\n{"id":"broken"`);
     assert.deepEqual(loadSignals(path).map((row) => row.id), ['1']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the committed snapshot round-trips and an append expands it', () => {
+  const dir = tempDir();
+  const path = join(dir, 'signals.jsonl');
+  try {
+    appendSignals(corpus.slice(0, 2), path);
+    const snap = writeSnapshot(path);
+    assert.equal(snap.path, `${path}.gz`);
+    assert.ok(snap.bytes > 0);
+
+    // A fresh clone only has the snapshot, and must still read it.
+    rmSync(path);
+    assert.deepEqual(loadSignals(path).map((row) => row.id).sort(), ['1', '2']);
+
+    // The first append expands the snapshot instead of replacing it.
+    appendSignals([corpus[2]], path);
+    assert.deepEqual(loadSignals(path).map((row) => row.id).sort(), ['1', '2', '3']);
+
+    assert.throws(() => writeSnapshot(join(dir, 'absent.jsonl')), /no corpus/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

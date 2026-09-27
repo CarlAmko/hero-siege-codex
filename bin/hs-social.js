@@ -23,6 +23,7 @@ import {
   maskToken,
   parseChannelSpec,
   resolveToken,
+  writeSnapshot,
 } from '../src/social-source.js';
 import { parseWhen, querySignals, summarizeCorpus, SIGNAL_KINDS, PRICE_BASES } from '../src/social.js';
 
@@ -194,6 +195,21 @@ function handleStats(cmdArgs) {
   }
   printPriceTable(summary.price);
   console.log('');
+}
+
+function handleSnapshot(cmdArgs) {
+  const flags = parseArgs(cmdArgs);
+  try {
+    const result = writeSnapshot(corpusPath(flags));
+    if (flags.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    const mb = (result.bytes / 1048576).toFixed(1);
+    console.log(`${ANSI.green}snapshot written${ANSI.reset} ${ANSI.dim}${mb} MB → ${result.path}${ANSI.reset}`);
+  } catch (error) {
+    console.log(`${ANSI.red}${error.message}${ANSI.reset}`);
+  }
 }
 
 /**
@@ -444,6 +460,7 @@ ${ANSI.bold}Commands${ANSI.reset}
   ${ANSI.cyan}import${ANSI.reset}   Import a channel export (JSONL / JSON) instead of pulling
   ${ANSI.cyan}query${ANSI.reset}    Answer a question over the corpus
   ${ANSI.cyan}stats${ANSI.reset}    Corpus overview: volume, intent mix, top items, price bands
+  ${ANSI.cyan}snapshot${ANSI.reset} Write the gzipped corpus snapshot that ships with the repo
 
 ${ANSI.bold}Credential${ANSI.reset}
   Resolution order: ${ANSI.dim}--token · HS_SOCIAL_TOKEN · the local Discord client's stored session${ANSI.reset}
@@ -482,6 +499,7 @@ ${ANSI.bold}Examples${ANSI.reset}
   hs-social ingest --channel 123456=trade --max 1000
   hs-social ingest --channel 123456=trade --since 2w --delay 900
   hs-social import ./dump.jsonl --channel price-check
+  hs-social snapshot                   # refresh data/social-signals.jsonl.gz
   hs-social query 'item:bucket quality:>=110'
 
 ${ANSI.yellow}Warning${ANSI.reset} A user-session token is a self-bot. Discord's ToS prohibits automating an
@@ -514,6 +532,9 @@ switch (command) {
     break;
   case 'stats':
     handleStats(rest);
+    break;
+  case 'snapshot':
+    handleSnapshot(rest);
     break;
   case 'help':
   case '--help':

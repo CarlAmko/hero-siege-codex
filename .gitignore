@@ -18,6 +18,8 @@ node_modules/
 Thumbs.db
 *.log
 
-# Generated social-signal corpus (ingested Discord rows)
+# Generated social-signal corpus (ingested Discord rows). The live file is
+# gitignored; the committed snapshot is the .gz that loadSignals falls back to.
 data/social-signals.jsonl
 data/social-signals.jsonl.*
+!data/social-signals.jsonl.gz

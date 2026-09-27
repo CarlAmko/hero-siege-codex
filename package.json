@@ -17,6 +17,7 @@
     "triage": "node bin/hs-economy.js triage",
     "social": "node bin/hs-social.js",
     "social:ingest": "node bin/hs-social.js ingest",
+    "social:snapshot": "node bin/hs-social.js snapshot",
     "social:mcp": "node bin/hs-social-mcp.js",
     "test": "node --test test/*.test.js"
   },

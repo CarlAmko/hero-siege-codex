@@ -21,12 +21,12 @@ Discord API / channel exports ──> src/social-source.js ──> src/social.js
 - **HTTP & REST Server (`src/server.js`)**: Native `node:http` server exposing REST endpoints (`/api/search`, `/api/evaluate`, `/api/items`, `/api/runes`) and serving static assets for the client-side SPA in `public/index.html`.
 - **CLI Interface (`bin/hs-economy.js`)**: Terminal client supporting quick item checks, search filters, tier list browsing, and an interactive continuous triage REPL (`triage`) using `node:readline` and ANSI formatting.
 - **Library Root (`src/index.js`)**: Barrel export re-exporting all database, engine, and social APIs.
-- **Social Signal Pipeline (`src/social.js`, `src/social-source.js`)**: Turns Hero Siege Discord trade/price-check chatter into structured rows — entity (resolved against the dictionaries with exact name-window matching), Satanic Dice quality, sockets, price (gold normalized to a base value; runes kept per denomination) — and answers questions over them. `social.js` is pure (extraction, query language, price bands); `social-source.js` owns I/O: credential acquisition (explicit token → env → the local client's stored session), channel/guild discovery, keyword harvest via guild search, channel export import, and the append-only `data/social-signals.jsonl` corpus. Derived facts only: authors are stored as short hashes, never names or ids.
+- **Social Signal Pipeline (`src/social.js`, `src/social-source.js`)**: Turns Hero Siege Discord trade/price-check chatter into structured rows — entity (resolved against the dictionaries with exact name-window matching), Satanic Dice quality, sockets, price (gold normalized to a base value; runes kept per denomination) — and answers questions over them. `social.js` is pure (extraction, query language, price bands); `social-source.js` owns I/O: credential acquisition (explicit token → env → the local client's stored session), channel/guild discovery, keyword harvest via guild search, channel export import, and the append-only `data/social-signals.jsonl` corpus (with a committed gzipped snapshot it falls back to). Derived facts only: authors are stored as short hashes, never names or ids.
 
 ## Key Directories
 - `src/`: Core application modules (database indexer, valuation engine, social-signal pipeline, HTTP server, library entry point).
 - `bin/`: Executables — `hs-economy.js` (item checks, tier lists, triage REPL), `hs-social.js` (social-signal ingest/query CLI), `hs-social-mcp.js` (MCP stdio server).
-- `data/`: Reference JSON datasets for items, runes, runewords, sets, affixes, augments, and gear slots, plus the generated (gitignored) `social-signals.jsonl` corpus.
+- `data/`: Reference JSON datasets for items, runes, runewords, sets, affixes, augments, and gear slots, plus the generated live `social-signals.jsonl` corpus (gitignored) and its committed `social-signals.jsonl.gz` snapshot.
 - `public/`: Frontend codex SPA (vanilla HTML5, CSS3, and JavaScript).
 - `test/`: Native Node.js unit and integration test suites.
 
@@ -72,6 +72,9 @@ node bin/hs-social.js import ./trade-dump.jsonl --channel trade
 # Ask questions over the corpus
 node bin/hs-social.js query 'item:bucket quality:>=110 currency:gold since:7d'
 node bin/hs-social.js stats
+
+# Refresh the committed gzipped corpus snapshot (what a fresh clone reads)
+node bin/hs-social.js snapshot
 
 # MCP stdio server for agents
 npm run social:mcp

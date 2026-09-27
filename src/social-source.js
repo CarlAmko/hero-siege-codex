@@ -19,10 +19,11 @@
  * message text capped unless told otherwise.
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 import { normalizeMessage, parseTimestamp } from './social.js';
 
@@ -398,11 +399,32 @@ export function parseChannelSpec(spec) {
 const isNormalizedRow = (row) =>
   row && typeof row === 'object' && 'kind' in row && 'author' in row && 'ts' in row;
 
-/** Read the corpus, last write winning on duplicate ids. Missing file → []. */
+/**
+ * The committed gzipped snapshot that ships with the repo. The live corpus is
+ * a large, gitignored file the puller appends to, so a fresh clone only has
+ * the snapshot: reads fall back to it, and the first append expands it.
+ */
+const snapshotPath = (path) => `${path}.gz`;
+
+/** Corpus text from the live file, else the snapshot; null when neither exists. */
+function readCorpusText(path) {
+  if (existsSync(path)) return readFileSync(path, 'utf8');
+  if (existsSync(snapshotPath(path))) return gunzipSync(readFileSync(snapshotPath(path))).toString('utf8');
+  return null;
+}
+
+/** Materialize the live corpus from the snapshot so an append cannot drop it. */
+function expandSnapshot(path) {
+  if (existsSync(path) || !existsSync(snapshotPath(path))) return;
+  writeFileSync(path, gunzipSync(readFileSync(snapshotPath(path))));
+}
+
+/** Read the corpus, last write winning on duplicate ids. Missing → []. */
 export function loadSignals(path = DEFAULT_CORPUS) {
-  if (!existsSync(path)) return [];
+  const text = readCorpusText(path);
+  if (text === null) return [];
   const rows = new Map();
-  for (const line of readFileSync(path, 'utf8').split('\n')) {
+  for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
@@ -418,8 +440,22 @@ export function loadSignals(path = DEFAULT_CORPUS) {
 export function appendSignals(rows, path = DEFAULT_CORPUS) {
   if (!Array.isArray(rows) || rows.length === 0) return 0;
   mkdirSync(dirname(path), { recursive: true });
+  expandSnapshot(path);
   appendFileSync(path, rows.map((row) => JSON.stringify(row)).join('\n') + '\n');
   return rows.length;
+}
+
+/**
+ * Write the gzipped snapshot of the live corpus, for committing. The snapshot
+ * is what a fresh clone reads; regenerate it after a resync (or before a
+ * push), so the tracked corpus keeps up with the local one.
+ */
+export function writeSnapshot(path = DEFAULT_CORPUS) {
+  const text = readCorpusText(path);
+  if (text === null) throw new Error(`no corpus at ${path} to snapshot`);
+  const target = snapshotPath(path);
+  writeFileSync(target, gzipSync(text, { level: 9 }));
+  return { path: target, bytes: statSync(target).size };
 }
 
 /**
