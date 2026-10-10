@@ -126,12 +126,18 @@ fn deep_unwrap(v: &Value, depth: u8) -> Value {
 pub fn extract_messages(buf: &[u8]) -> Vec<Value> {
     let mut out = extract_json_values(buf);
     out.extend(extract_b64_json_blobs(buf));
+    let mut pending_route: Option<String> = None;
     for seg in buf.split(|b| *b < 0x20 || *b == 0x7f) {
         // binary noise splits into thousands of short segments; decide on the
         // raw bytes, before paying for a String
         let blob = seg.len() > 100;
         let query = seg.contains(&b'=') && seg.contains(&b'&');
         if !blob && !query {
+            // A bare `route/name` segment frames the form that follows: the
+            // game sends `route \0 J \0 account_id=...`, split on the NULs.
+            if let Some(route) = route_name(seg) {
+                pending_route = Some(route);
+            }
             continue;
         }
         let s = String::from_utf8_lossy(seg);
@@ -139,7 +145,8 @@ pub fn extract_messages(buf: &[u8]) -> Vec<Value> {
             out.extend(base64_payload(&s));
         }
         if query {
-            out.extend(query_payload(&s));
+            let route = embedded_route(&s).or_else(|| pending_route.take());
+            out.extend(query_payload(&s, route));
         }
     }
     // The blob scanners overlap by design (clean printable blob vs binary
@@ -193,17 +200,57 @@ fn base64_payload(s: &str) -> Option<Value> {
     b64_json(s)
 }
 
-fn query_payload(s: &str) -> Option<Value> {
+fn query_payload(s: &str, route: Option<String>) -> Option<Value> {
     if !s.contains('=') || !s.contains('&') {
         return None;
     }
-    // start at the first key=, so protocol noise ahead of it is dropped
-    let start = s.find(|c: char| c.is_ascii_alphanumeric() || c == '_')?;
-    let map: serde_json::Map<String, Value> = form_urlencoded::parse(&s.as_bytes()[start..])
+    // start at the first clean key=, so protocol noise ahead of it is dropped
+    let eq = s.find('=')?;
+    let start = s[..eq]
+        .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let mut map: serde_json::Map<String, Value> = form_urlencoded::parse(&s.as_bytes()[start..])
         .filter(|(k, _)| !k.is_empty())
         .map(|(k, v)| (k.into_owned(), parse_query_value(v.into_owned())))
         .collect();
-    (!map.is_empty()).then_some(Value::Object(map))
+    if map.is_empty() {
+        return None;
+    }
+    if let Some(route) = route {
+        map.insert("__route".into(), Value::String(route));
+    }
+    Some(Value::Object(map))
+}
+
+/// A segment that is nothing but `a/b`: the route framing the next form.
+fn route_name(seg: &[u8]) -> Option<String> {
+    if seg.is_empty() || seg.len() > 128 {
+        return None;
+    }
+    if !seg.iter().all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'/') {
+        return None;
+    }
+    let s = std::str::from_utf8(seg).ok()?;
+    (s.contains('/') && !s.starts_with('/') && !s.ends_with('/')).then(|| s.to_string())
+}
+
+/// A route prefix glued to its form in one segment (`market/x.account_id=`).
+fn embedded_route(s: &str) -> Option<String> {
+    let head = &s[..s.find('=')?];
+    let slash = head.rfind('/')?;
+    let bytes = head.as_bytes();
+    let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut lo = slash;
+    while lo > 0 && is_ident(bytes[lo - 1]) {
+        lo -= 1;
+    }
+    let mut hi = slash;
+    while hi < bytes.len() && (is_ident(bytes[hi]) || bytes[hi] == b'/') {
+        hi += 1;
+    }
+    let route = &head[lo..hi];
+    (route.contains('/') && !route.ends_with('/')).then(|| route.to_string())
 }
 
 fn parse_query_value(v: String) -> Value {

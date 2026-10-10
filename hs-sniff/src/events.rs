@@ -227,6 +227,9 @@ pub enum GameEvent {
         finder: String,
         name: String,
     },
+    /// The session fields the client attaches to its own market/API requests.
+    /// Enough to re-sign a market query — see [`crate::market::SessionContext`].
+    SessionContext(crate::market::SessionContext),
     ItemAdded {
         rarity: Value,
         /// An Odyssey item the game did not flag as named.
@@ -268,6 +271,7 @@ impl GameEvent {
             GameEvent::Vitals { .. } => "vitals",
             GameEvent::ZoneRegion(_) => "zone_region",
             GameEvent::Found { .. } => "found",
+            GameEvent::SessionContext(_) => "session_context",
             GameEvent::ItemAdded { .. } => "item_added",
             GameEvent::SatanicZone { .. } => "satanic_zone",
         }
@@ -321,6 +325,11 @@ impl GameEvent {
             GameEvent::ZoneRegion(r) => json!({"kind": "zone_region", "region": r}),
             GameEvent::Found { finder, name } => {
                 json!({"kind": "found", "finder": finder, "name": name})
+            }
+            GameEvent::SessionContext(ctx) => {
+                let mut value = ctx.to_json();
+                value["kind"] = json!("session_context");
+                value
             }
             GameEvent::ItemAdded { .. } => {
                 let GameEvent::ItemAdded {
@@ -376,6 +385,8 @@ pub struct Summary {
     pub character: Option<String>,
     pub level: i64,
     pub kills: i64,
+    /// The latest merged market session context seen on the wire.
+    pub session: crate::market::SessionContext,
 }
 
 impl Summary {
@@ -391,11 +402,21 @@ impl Summary {
             GameEvent::SatanicZone { zone, .. } => self.satanic_zone = Some(zone.clone()),
             GameEvent::Room(r) => self.room = Some(r.clone()),
             GameEvent::WhoseAccount(a) => self.account = Some(a.clone()),
-            GameEvent::Account { name, level, kills, .. } => {
+            GameEvent::Account { name, level, kills, season, hardcore, .. } => {
                 self.character = Some(name.clone());
                 self.level = *level;
                 self.kills = *kills;
+                // The save also carries the two mode fields the market
+                // checksum needs; fold them in so a context captured from an
+                // identity packet becomes complete once the game saves.
+                if *season >= 0 {
+                    self.session.season = Some(season.to_string());
+                }
+                if *hardcore == 0 || *hardcore == 1 {
+                    self.session.hardcore = Some(hardcore.to_string());
+                }
             }
+            GameEvent::SessionContext(ctx) => self.session.observe(ctx),
             _ => {}
         }
     }
@@ -523,6 +544,45 @@ fn our_account(d: &Value) -> Option<String> {
         Value::Number(n) => Some(n.to_string()),
         _ => None,
     }
+}
+
+/// The client's own session fields, out of its market/API requests. Identity
+/// must be there — an account id, or the unique id paired with a region — and
+/// at least one mode/route field, so a nearby-player list is not mistaken for
+/// the client's own session. Only ever read at message top level (see
+/// `dict_to_events`).
+fn session_context(d: &Value) -> Option<crate::market::SessionContext> {
+    let text = |fields: &[&str]| -> Option<String> {
+        match field(d, fields)? {
+            Value::String(s) if !s.is_empty() => Some(s.clone()),
+            Value::Number(n) => Some(n.to_string()),
+            _ => None,
+        }
+    };
+    let row_route = text(&["__route"]).unwrap_or_default();
+    let is_market = row_route.starts_with("market/") || row_route.contains("/market");
+    let ctx = crate::market::SessionContext {
+        account_id: text(&["account_id", "accountId"]),
+        unique_account_id: text(ACCOUNT_ID_FIELDS),
+        crossregion_identifier: text(REGION_ID_FIELDS),
+        season: text(&["season"]).filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())),
+        hardcore: text(&["hardcore"]).filter(|s| s == "0" || s == "1"),
+        beta: text(&["beta"]).filter(|s| s == "0" || s == "1"),
+        identifier: text(&["identifier"]),
+        // Only the market route's checksum is reusable; a mailbox or save
+        // checksum is signed differently and would be rejected.
+        native_checksum: is_market
+            .then(|| text(&["checksum"]))
+            .flatten()
+            .filter(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())),
+    };
+    let identity = ctx.account_id.is_some()
+        || (ctx.unique_account_id.is_some() && ctx.crossregion_identifier.is_some());
+    let usable = ctx.season.is_some()
+        || ctx.hardcore.is_some()
+        || ctx.beta.is_some()
+        || ctx.crossregion_identifier.is_some();
+    (identity && usable && !ctx.is_empty()).then_some(ctx)
 }
 
 /// Which act the character is in, out of the save. `act_previous[1]` tracks
@@ -925,7 +985,7 @@ fn item_event(obj: &Value, fingerprint: Option<&str>, ground: bool) -> GameEvent
 
 /// One packet can carry several things at once (currency + items + zone), so
 /// every matching rule contributes; matching only the first loses events.
-fn dict_to_events(d: &Value) -> Vec<GameEvent> {
+fn dict_to_events(d: &Value, depth: usize) -> Vec<GameEvent> {
     if d.as_object().is_none_or(|o| o.contains_key("steam")) {
         return vec![];
     }
@@ -1062,15 +1122,21 @@ fn dict_to_events(d: &Value) -> Vec<GameEvent> {
         let raw = xp_gain(d);
         events.push(GameEvent::XpGain(if is_quest_reward(d) { raw } else { guild_share_to_character(raw) }));
     }
+    // Identity is top-level only: a nested list of players is not our session.
+    if depth == 0 {
+        if let Some(ctx) = session_context(d) {
+            events.push(GameEvent::SessionContext(ctx));
+        }
+    }
     events
 }
 
-fn walk_dicts(v: &Value, events: &mut Vec<GameEvent>) {
+fn walk_dicts(v: &Value, events: &mut Vec<GameEvent>, depth: usize) {
     match v {
-        Value::Object(_) => events.extend(dict_to_events(v)),
+        Value::Object(_) => events.extend(dict_to_events(v, depth)),
         Value::Array(items) => {
             for item in items {
-                walk_dicts(item, events);
+                walk_dicts(item, events, depth);
             }
         }
         _ => {}
@@ -1081,7 +1147,7 @@ fn walk_dicts(v: &Value, events: &mut Vec<GameEvent>) {
 pub fn events_from_messages(messages: &[Value]) -> Vec<GameEvent> {
     let mut events = Vec::new();
     for m in messages {
-        walk_dicts(m, &mut events);
+        walk_dicts(m, &mut events, 0);
     }
     events
 }
@@ -1220,6 +1286,56 @@ mod tests {
     fn zone_question_detected() {
         let events = ev(json!({"unique_account_id": "99-123", "crossregion_identifier": "eu-1"}));
         assert!(matches!(events.first(), Some(GameEvent::ZoneRegion(r)) if r == "eu-1"));
+    }
+
+    #[test]
+    fn market_session_context_is_collected() {
+        let events = ev(json!({
+            "account_id": "eu-12345", "unique_account_id": "99-777",
+            "crossregion_identifier": "eu-1", "season": 10, "hardcore": 0, "beta": 0,
+            "checksum": "deadbeef", "api_script": "market/__route_placeholder"
+        }));
+        let mut summary = Summary::default();
+        for event in &events {
+            summary.observe(event);
+        }
+        assert!(summary.session.is_complete(), "{:?}", summary.session);
+        assert_eq!(summary.session.raw_account_id(), Some("12345"));
+    }
+
+    #[test]
+    fn market_route_checksum_is_captured_but_mailbox_is_not() {
+        let market = ev(json!({
+            "__route": "market/market_player_get_items_on_sale",
+            "account_id": "3-2304", "unique_account_id": "180729201",
+            "identifier": "TOKEN", "season": 11, "hardcore": 0, "beta": 0,
+            "checksum": "e2137c7d2b54197cdda2f40c9cd7c2500d3a6ab5058f58a2e501570f02f167a7"
+        }));
+        let mut summary = Summary::default();
+        for event in &market {
+            summary.observe(event);
+        }
+        assert!(summary.session.native_checksum.is_some());
+        // Buffers no crossregion, so the body is still incomplete; the market
+        // packet alone is enough for the *native* fallback, not the six fields.
+        assert!(!summary.session.can_sign());
+
+        let mailbox = ev(json!({
+            "__route": "mailbox/mailbox_check_new",
+            "account_id": "2304", "season": 11, "hardcore": 0, "beta": 0,
+            "checksum": "bc4d4496255893277100921424c124195d2e400dc02ddc3c1ff85a8f785082e0"
+        }));
+        let mut other = Summary::default();
+        for event in &mailbox {
+            other.observe(event);
+        }
+        assert!(other.session.native_checksum.is_none(), "mailbox checksum must not be reused");
+    }
+
+    #[test]
+    fn a_nearby_player_list_is_not_our_session() {
+        let events = ev(json!({"players": [{"account_id": "5", "season": 3}]}));
+        assert!(!events.iter().any(|e| matches!(e, GameEvent::SessionContext(_))));
     }
 
     #[test]

@@ -10,6 +10,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64 = "0.22"
 form_urlencoded = "1"
+# Market client: the game's market is HTTPS, so the crate re-issues the query
+# itself with the session context it sniffed. sha2 = the checksum/multipass
+# signatures; flate2 = the zlib-compressed `items` blob in the response.
+sha2 = "0.10"
+flate2 = "1"
+ureq = "2"
 
 # Live capture (feature `live`). Everything else is pure std + serde.
 pcap = { version = "2", optional = true }

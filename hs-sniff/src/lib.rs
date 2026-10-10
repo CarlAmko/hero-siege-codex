@@ -27,6 +27,7 @@
 
 pub mod decode;
 pub mod events;
+pub mod market;
 pub mod mcp;
 pub mod reasm;
 pub mod wire;
@@ -37,6 +38,11 @@ pub mod capture;
 pub use decode::extract_messages;
 pub use events::{
     events_from_messages, Currency, GameEvent, Summary, RARITIES, SS_TIER,
+};
+pub use market::{
+    build_market_body, fetch_market, item_mask, parse_market_query, parse_market_response,
+    MarketCatalog, MarketCatalogTable, MarketClient, MarketError, MarketOutcome, MarketQuery,
+    MarketResult, MarketTarget, PriceBand, SessionContext, StatFilter, MARKET_COOLDOWN_MS,
 };
 pub use reasm::{Flow, Reassembler};
 pub use wire::{parse_pcap_file, Frame, ReplaySource, WireError};

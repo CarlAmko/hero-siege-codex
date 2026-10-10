@@ -1,0 +1,311 @@
+id	name
+313	Additional Casts with Skill Relics
+140	Additive Arcane Damage
+136	Additive Cold Damage
+132	Additive Fire Damage
+144	Additive Lightning Damage
+148	Additive Poison Damage
+258	Ailment critical damage increased by
+250	Ailment Damage
+51	All Attributes
+161	All damage reduction
+364	All Recovery increased by
+173	All Resistances
+201	All Skills
+360	Ancient monsters have a chance to drop a Relic when killed
+361	Ancient monsters have a chance to summon a Treasure Goblin when killed
+354	Angelic Item drop chances increased by
+195	Arcane Absorption
+181	Arcane Resistance
+142	Arcane Skill Damage %
+224	Arcane Skills
+269	Area of Effect Skill Damage increased by
+268	Area of Effect Skill Radius increased by
+45	Armor
+46	Armor per level
+472	Attack Area of Effect Radius increased by
+358	Attack Damage Increased by
+67	Attack Range
+74	Attack Rating
+75	Attack Rating %
+76	Attack Rating per level
+68	Attack Speed
+356	Attack Speed Increased by
+292	Attacks can hit multiple enemies
+413	Attacks fire
+157	Base Block Chance
+154	Base Defense
+251	Bleed damage increased by
+256	Burning damage increased by
+288	Cannot be Frozen
+357	Cast Rate Increased by
+72	Chance for Critical Strike
+341	Chance for Guardians to perform an additional attack
+257	Chance to critically hit with ailments
+276	Chance to inflict damage to self when attacking
+278	Chance to inflict damage to self when casting
+265	Chance to replenish life when blocking
+367	Chance to spawn Ancient packs
+475	Chance to suppress incoming spell hits
+348	Codex Entries
+192	Cold Absorption
+177	Cold Resistance
+138	Cold Skill Damage %
+223	Cold Skills
+73	Critical Strike Damage
+366	Critical Strike Damage Increased by
+97	Crushing Blow
+98	Crushing Blow Armor Break increased by
+162	Damage reduced
+171	Damage Return
+168	Damage taken recouped as Life
+167	Damage taken recouped as Mana
+95	Deadly Blow
+96	Deadly Blow Damage increased by
+155	Defense %
+156	Defense per level
+169	Defense vs Missiles
+36	Dexterity
+37	Dexterity per level
+291	Double Jump
+390	Effect Duration
+39	Energy
+40	Energy per level
+28	Enhanced Damage
+31	Enhanced Damage per level
+29	Enhanced Defense
+30	Enhanced Defense per level
+172	Every point in resistances increases your damage by
+363	Experience Gained Increased by
+437	Explosion AoE
+111	Explosion Damage
+112	Explosion Skills
+91	Extra Arcane Damage to Shadow Burning Monsters
+89	Extra Cold Damage to Frostbitten Monsters
+87	Extra Damage to Ailments
+80	Extra damage to Bleeding
+83	Extra damage to Burning
+86	Extra Damage to Frost Bitten
+81	Extra damage to Frozen
+82	Extra damage to Poisoned
+85	Extra Damage to Shadow Burning
+84	Extra damage to Stasis
+79	Extra damage to Stunned
+88	Extra Fire Damage to Burning Monsters
+286	Extra Gold from kills
+92	Extra Lightning Damage to Monsters inflicted with Stasis
+93	Extra Physical Damage to Bleeding Monsters
+90	Extra Poison Damage to Poisoned Monsters
+196	Faster Cast Rate
+170	Faster Hit Recovery
+191	Fire Absorption
+175	Fire Resistance
+134	Fire Skill Damage %
+225	Fire Skills
+396	Flask Cooldown
+391	Flask Duration
+393	Flask Extra Stacks
+389	Flask Instant Life Replenish
+386	Flask Instant Mana Replenish
+388	Flask Life Replenish %
+385	Flask Mana Replenish %
+199	Flask Skill Haste
+395	Flask Stacks Recovered
+394	Flask Stacks Recovered Per Kill
+141	Flat Arcane Skill Damage
+137	Flat Cold Skill Damage
+153	Flat Elemental Skill Damage
+133	Flat Fire Skill Damage
+145	Flat Lightning Skill Damage
+128	Flat Physical Damage
+149	Flat Poison Skill Damage
+304	Follower Relic Attack Speed increased by
+303	Follower Relic Damage increased by
+255	Frost Bite damage increased by
+352	Gold from monster kills increased by
+342	Guardian Attack Speed increased by
+340	Guardian damage increased by
+287	Half Freeze Duration
+353	Heroic Item drop chances increased by
+152	Ignore All Resistance
+143	Ignore Arcane Resistance
+139	Ignore Cold Resistance
+135	Ignore Fire Resistance
+147	Ignore Lightning Resistance
+151	Ignore Poison Resistance
+94	Ignore Target Defense
+110	Increased Ailment Frequency
+50	Increased All Attributes
+44	Increased Armor
+104	Increased Bleeding Frequency
+262	Increased Buffing Aura Range
+106	Increased Burning Frequency
+158	Increased Chance of Blocking
+474	Increased Damage Return
+260	Increased Damaging Aura Range
+35	Increased Dexterity
+38	Increased Energy
+282	Increased Experience Gain
+283	Increased Experience Gain Below Level 100
+109	Increased Frost Bite Frequency
+343	Increased Guardian Attack Range
+344	Increased Guardian Duration
+41	Increased Intelligence
+267	Increased Orbital Projectile Damage
+266	Increased Orbital Projectile Duration
+105	Increased Poisoned Frequency
+108	Increased Shadow Burning Frequency
+107	Increased Stasis Frequency
+32	Increased Strength
+47	Increased Vitality
+375	Increases pack size by
+261	Increases the Effectiveness of Buffing Auras by
+259	Increases the Effectiveness of Damaging Auras by
+42	Intelligence
+43	Intelligence per level
+27	Jumping Power
+412	Less damage dealt with skills that have a cooldown
+52	Life
+53	Life %
+59	Life After each Kill
+54	Life per level
+58	Life per second
+55	Life Replenish
+264	Life replenished when Blocking
+57	Life stolen per Hit
+281	Light Radius
+194	Lightning Absorption
+179	Lightning Resistance
+146	Lightning Skill Damage %
+226	Lightning Skills
+350	Loot Amount increased by
+160	Magic damage reduction
+284	Magic Find
+362	Magic Find Increased by
+285	Magic Find per level
+101	Magic Skill Damage
+359	Magic Skill Damage Increased by
+60	Mana
+61	Mana %
+66	Mana After each Kill
+200	Mana Cost Reduced
+62	Mana per level
+65	Mana per second
+63	Mana Replenish
+64	Mana stolen per Hit
+174	Maximum All Resists
+182	Maximum Arcane Resist
+178	Maximum Cold Resist
+176	Maximum Fire Resist
+180	Maximum Lightning Resist
+184	Maximum Poison Resist
+451	Maximum Weapon Damage Increased by
+290	Merchant prices
+293	Mirrors your other ring
+365	Monsters have a chance to re-spawn as a Legion
+102	Monsters rest in peace after death
+25	Movement Speed
+465	Movement Speed Converted to Damage
+355	Movement Speed Increased by
+307	Non-Buff Proc Relic chance increased by
+248	of Armor is added as Attack Damage
+247	of Armor is added as Magic Skill Damage
+411	of Damage Taken Redirected to Octa
+244	of Energy is added as Cold Skill Damage
+242	of Energy is added as Lightning Skill Damage
+241	of Energy is added as Magic Skill Damage
+249	of Faster Cast Rate is added as Movement Speed
+279	of Incoming Damage is taken over
+232	of Intelligence is added as Arcane Skill Damage
+231	of Intelligence is added as Cold Skill Damage
+230	of Intelligence is added as Fire Skill Damage
+229	of Intelligence is added as Lightning Skill Damage
+228	of Intelligence is added as Magic Skill Damage
+234	of Vitality is added as Attack Damage
+235	of Vitality is added as Magic Skill Damage
+467	of your Cold Resistance is converted to Cold Skill Damage
+469	of your Poison Resistance is converted to Poison Skill Damage
+99	Open Wounds
+100	Open Wounds Bleed Damage increased by
+299	Orbiting Relic Damage increased by
+296	Orbiting Relic Radius increased by
+300	Orbiting Relics execute monsters below
+26	Phasing
+129	Physical Damage %
+103	Physical Damage per level
+159	Physical damage reduction
+165	Physical Damage taken as Arcane
+163	Physical Damage taken as Cold
+164	Physical Damage taken as Fire
+166	Physical Damage taken as Lightning
+222	Physical Skills
+77	Piercing
+193	Poison Absorption
+289	Poison Length Reduced
+183	Poison Resistance
+150	Poison Skill Damage %
+227	Poison Skills
+252	Poisoned damage increased by
+130	Projectile Damage increased by
+417	Projectile Size increased by
+70	Projectile Speed
+418	Projectiles are fired in random directions
+414	Projectiles chain
+415	Projectiles fork on hit
+416	Projectiles Return to you
+221	Random Skill Element
+271	Ranged Skills
+351	Rune Drop Chances Increased by
+275	Self inflicted damage from attacking
+277	Self inflicted damage from casting
+337	Sentry Amount
+338	Sentry Attack Speed
+336	Sentry Damage %
+339	Sentry Duration
+335	Sentry Skills
+254	Shadow Burn damage increased by
+202	Singular Skills
+198	Skill Haste
+294	Skill Movement Diminish decreased by
+186	Skill parameter 186
+187	Skill parameter 187
+314	Skill relic cooldown increased by
+310	Skill Relic Damage increased by
+312	Skill Relic Projectile Size increased by
+78	Slow Target
+20	Sockets
+471	Spell Area of Effect Radius increased by
+253	Stasis damage increased by
+33	Strength
+34	Strength per level
+419	Sub Skills
+330	Summon Amount
+333	Summon Attack Speed
+332	Summon Damage %
+328	Summon Damage Reduction
+327	Summon Life %
+334	Summon Movement Speed
+329	Summon Resistances
+331	Summon Skills
+273	to Area of Effect Skills
+308	to Effectiveness of Non-Buff Proc Relics
+302	to Follower Relic Damage
+305	to Follower Relic Projectiles
+263	to Maximum Crushing Blow Stacks
+450	to Maximum Weapon Damage
+270	to Melee Skills
+448	to Minimum Weapon Damage
+272	to Orbital Skills
+297	to Orbiting Relic Amount
+298	to Orbiting Relic Damage
+301	to Orbiting Relic size
+274	to Projectile Skills
+71	to Projectile Speed
+309	to Skill Relic Damage
+311	to Skill Relic Projectiles
+220	to Sub Skills
+69	Total Attack Speed
+197	Total Faster Cast Rate
+185	Triggered skill identifier
+48	Vitality
+49	Vitality per level

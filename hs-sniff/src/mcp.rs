@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::{json, Value};
 
 use crate::events::{events_from_messages, GameEvent, Summary};
+use crate::market::{self, MarketCatalogTable, MarketClient};
 use crate::wire::ReplaySource;
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
@@ -43,6 +44,9 @@ impl SessionState {
 #[derive(Default)]
 pub struct SharedState {
     inner: Mutex<SessionState>,
+    /// In-process cooldown + result cache, so a long-lived server does not
+    /// hammer the game's market.
+    market: Mutex<MarketClient>,
 }
 
 impl SharedState {
@@ -189,6 +193,33 @@ fn call_tool(
                 "summary": shared.summary_json(),
             })
         }
+        "hs_market_context" => shared.summary().session.to_json(),
+        "hs_market" => {
+            let query_text = args
+                .get("query")
+                .and_then(|q| q.as_str())
+                .ok_or_else(|| (-32602, "missing params.arguments.query (plain text)".to_string()))?;
+            let session = shared.summary().session;
+            if !session.can_sign() {
+                json!({
+                    "error": "market session context incomplete",
+                    "missing": session.missing(),
+                    "hint": "open the in-game Market once with capture running, then retry",
+                })
+            } else {
+                let catalog = MarketCatalogTable::new();
+                let query = market::parse_market_query(query_text, &catalog)
+                    .map_err(|e| (-32602, e.to_string()))?;
+                let mut client = shared.market.lock().unwrap();
+                match client.search(&session, &query) {
+                    Ok(outcome) => json!({
+                        "query": query.to_json(),
+                        "result": outcome.to_json(),
+                    }),
+                    Err(error) => json!({"error": error.to_string()}),
+                }
+            }
+        }
         other => return Err((-32602, format!("unknown tool: {other}"))),
     };
     Ok(json!({
@@ -270,6 +301,22 @@ fn tools_list() -> Vec<Value> {
             "type": "object",
             "properties": {"path": {"type": "string", "description": "path to a .pcap or .jsonl file"}},
             "required": ["path"]
+        }
+    }),
+    json!({
+        "name": "hs_market_context",
+        "description": "The market session fields sniffed from the game's own requests (account id, season, mode). `ready` is true once all six are present and a market query can be signed.",
+        "inputSchema": {"type": "object", "properties": {}}
+    }),
+    json!({
+        "name": "hs_market",
+        "description": "Current Hero Siege market prices for a plain-text query, e.g. \"2 socket Harlequinn's Crest\", \"Grief\", \"magic find >= 20 mask:1234\". Re-issues the game's own market query using the sniffed session context; returns gold listings and a low/median/high band. Requires a complete session context (open the in-game Market once with capture running).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "plain-text item/runeword query with optional filters"}
+            },
+            "required": ["query"]
         }
     }),
     ]
