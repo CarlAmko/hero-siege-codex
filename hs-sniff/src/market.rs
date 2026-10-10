@@ -316,12 +316,14 @@ pub fn build_market_body(ctx: &SessionContext, query: &MarketQuery) -> Result<St
         MarketTarget::ItemMask(mask) => {
             out.append_pair("filter_masks", &json!([mask]).to_string());
         }
-        // A runeword query carries an empty mask list plus the selector.
+        // A runeword query selects by runeword id, and `filter_masks` must be
+        // **absent** rather than an empty array: the server answers an explicit
+        // `filter_masks=[]` with HTTP 500. Verified live against
+        // market/market_fetch_items (runeword 51 -> 8 listings).
         MarketTarget::Runeword(id) => {
             if id == 0 || id > MAX_RUNEWORD_ID {
                 return Err(MarketError::BadTarget(format!("runeword id {id} out of range")));
             }
-            out.append_pair("filter_masks", "[]");
             out.append_pair("filter_runeword", &id.to_string());
         }
     };
@@ -351,8 +353,27 @@ pub fn build_market_body(ctx: &SessionContext, query: &MarketQuery) -> Result<St
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MarketListing {
+    /// Gold total for the whole listing. This is a **stack total**, not a unit
+    /// price: half the live rune rows carry `price != unit_price`.
     pub price: i64,
+    /// Per-unit gold price as the server reports it, when present.
     pub unit_price: Option<f64>,
+    /// Units in this listing. The server only sometimes labels it, so it is
+    /// otherwise derived from `price / unit_price` and defaults to 1.
+    pub units: u64,
+}
+
+impl MarketListing {
+    /// Per-unit gold price — the only comparable price across a market where
+    /// the same rune is listed as 1 unit and as a 13-unit stack. A single-unit
+    /// listing has `unit_price == price`; when the server omits it, the stack
+    /// price is the unit price.
+    pub fn unit_price_gold(&self) -> i64 {
+        match self.unit_price {
+            Some(unit) if unit > 0.0 => unit.round() as i64,
+            _ => self.price,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -376,19 +397,22 @@ pub struct PriceBand {
 }
 
 impl MarketResult {
-    /// Listings cheapest first (ties keep server order).
+    /// Cheapest **unit** price first — the ask ladder. Sorting by `price`
+    /// instead would rank a 13-unit stack above a single cheaper unit.
     pub fn by_price(&self) -> Vec<&MarketListing> {
         let mut rows: Vec<&MarketListing> = self.listings.iter().collect();
-        rows.sort_by_key(|row| row.price);
+        rows.sort_by_key(|row| row.unit_price_gold());
         rows
     }
 
-    /// Summary over every gold listing on the page.
+    /// Summary over every gold listing on the page, in per-unit gold. Banding
+    /// `price` would average stacks of different sizes together and inflate
+    /// every figure (the game's own `avgPrice` does exactly that).
     pub fn band(&self) -> Option<PriceBand> {
         if self.listings.is_empty() {
             return None;
         }
-        let mut prices: Vec<i64> = self.listings.iter().map(|row| row.price).collect();
+        let mut prices: Vec<i64> = self.listings.iter().map(|row| row.unit_price_gold()).collect();
         prices.sort_unstable();
         Some(PriceBand {
             currency: "gold",
@@ -402,7 +426,7 @@ impl MarketResult {
     pub fn to_json(&self) -> Value {
         json!({
             "listings": self.listings.iter()
-                .map(|row| json!({"price": row.price, "unit_price": row.unit_price}))
+                .map(|row| json!({"price": row.price, "unit_price": row.unit_price, "units": row.units}))
                 .collect::<Vec<_>>(),
             "total_matches": self.total_matches,
             "returned_count": self.returned_count,
@@ -456,7 +480,21 @@ pub fn parse_market_response(body: &[u8], status: u16) -> Result<MarketResult, M
             .get("unit_price")
             .or_else(|| object.get("unitPrice"))
             .and_then(parse_unit_price);
-        listings.push(MarketListing { price, unit_price });
+        let units = object
+            .get("units")
+            .and_then(Value::as_u64)
+            .or_else(|| {
+                // `price` covers the whole stack, so units = price / unit price.
+                let unit = unit_price?;
+                if unit <= 0.0 {
+                    return None;
+                }
+                let n = (price as f64 / unit).round();
+                let exact = (price as f64 - unit * n).abs() <= 1.0;
+                (n >= 1.0 && exact).then_some(n as u64)
+            })
+            .unwrap_or(1);
+        listings.push(MarketListing { price, unit_price, units });
     }
     let total_matches = object.get("itemCount").and_then(Value::as_u64);
     Ok(MarketResult { listings, total_matches, returned_count })
@@ -741,6 +779,9 @@ pub trait MarketCatalog {
 pub struct MarketCatalogTable {
     items: HashMap<String, MarketTarget>,
     item_names: Vec<String>,
+    /// Normalized name -> item type, so a sweep can watch a whole bucket (16 is
+    /// the materials/consumables type).
+    item_type_of: HashMap<String, u64>,
     runewords: HashMap<String, u32>,
     runeword_names: Vec<String>,
     stats: HashMap<String, u32>,
@@ -758,6 +799,7 @@ impl MarketCatalogTable {
     pub fn new() -> Self {
         let mut items = HashMap::new();
         let mut item_names = Vec::new();
+        let mut item_type_of = HashMap::new();
         for line in include_str!("../data/market-items.tsv").lines().skip(1) {
             let cols: Vec<&str> = line.split('\t').collect();
             if cols.len() < 5 {
@@ -775,10 +817,12 @@ impl MarketCatalogTable {
                 match items.get(&key) {
                     Some(existing) if existing != &MarketTarget::ItemMask(mask) => {
                         items.remove(&key);
+                        item_type_of.remove(&key);
                     }
                     Some(_) => {}
                     None => {
-                        items.insert(key, MarketTarget::ItemMask(mask));
+                        items.insert(key.clone(), MarketTarget::ItemMask(mask));
+                        item_type_of.insert(key, item_type);
                         item_names.push(cols[4].to_string());
                     }
                 }
@@ -802,6 +846,7 @@ impl MarketCatalogTable {
             let key = normalize_name(name);
             if items.remove(&key).is_some() {
                 item_names.retain(|n| normalize_name(n) != key);
+                item_type_of.remove(&key);
             }
         }
         let mut stats = HashMap::new();
@@ -819,7 +864,17 @@ impl MarketCatalogTable {
         }
         item_names.sort();
         runeword_names.sort();
-        Self { items, item_names, runewords, runeword_names, stats, stat_names }
+        Self { items, item_names, item_type_of, runewords, runeword_names, stats, stat_names }
+    }
+
+    /// Names of catalog items in one item type, for building a sweep watchlist.
+    /// Type 16 is the materials/consumables bucket; 15 is where runes live.
+    pub fn names_of_item_type(&self, item_type: u64) -> Vec<String> {
+        self.item_names
+            .iter()
+            .filter(|name| self.item_type_of.get(&normalize_name(name)) == Some(&item_type))
+            .cloned()
+            .collect()
     }
 
     fn runeword_by_name(&self, name: &str) -> Option<u32> {
@@ -1366,7 +1421,10 @@ mod tests {
         };
         let body = build_market_body(&ctx(), &query).unwrap();
         let form: HashMap<_, _> = form_urlencoded::parse(body.as_bytes()).into_owned().collect();
-        assert_eq!(form["filter_masks"], "[]");
+        assert!(
+            form.get("filter_masks").is_none(),
+            "an empty filter_masks is an HTTP 500; the key must be absent"
+        );
         assert_eq!(form["filter_runeword"], "7");
         assert_eq!(form["filter_sockets_min"], "2");
         assert_eq!(form["filter_sockets_max"], "4");
@@ -1413,8 +1471,14 @@ mod tests {
         assert_eq!(result.returned_count, 4);
         assert_eq!(result.total_matches, Some(42));
         let band = result.band().unwrap();
-        assert_eq!((band.currency, band.count, band.lowest, band.median, band.highest), ("gold", 2, 100, 500, 500));
+        // Per unit: row 0 is a single unit at 500, row 1 is 8 units at 12.5.
+        assert_eq!(band.currency, "gold");
+        assert_eq!(band.count, 2);
+        assert_eq!((band.lowest, band.median, band.highest), (13, 500, 500));
         assert_eq!(result.listings[1].unit_price, Some(12.5));
+        assert_eq!(result.listings[1].units, 8);
+        assert_eq!(result.listings[1].unit_price_gold(), 13);
+        assert_eq!(result.listings[0].units, 1);
     }
 
     #[test]

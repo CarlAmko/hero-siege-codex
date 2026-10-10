@@ -30,6 +30,7 @@ pub mod events;
 pub mod market;
 pub mod mcp;
 pub mod reasm;
+pub mod sweep;
 pub mod wire;
 
 #[cfg(feature = "live")]
@@ -45,4 +46,7 @@ pub use market::{
     MarketResult, MarketTarget, PriceBand, SessionContext, StatFilter, MARKET_COOLDOWN_MS,
 };
 pub use reasm::{Flow, Reassembler};
+pub use sweep::{
+    analyze, recipes_from_json, ItemBook, PriceLevel, Recipe, Signal, Thresholds,
+};
 pub use wire::{parse_pcap_file, Frame, ReplaySource, WireError};

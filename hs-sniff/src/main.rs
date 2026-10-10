@@ -11,7 +11,8 @@ use std::io::Read;
 use std::sync::Arc;
 
 use hs_sniff::events::{events_from_messages, GameEvent, Summary};
-use hs_sniff::market::{self, MarketCatalogTable};
+use hs_sniff::market::{self, MarketCatalog, MarketCatalogTable};
+use hs_sniff::sweep;
 use hs_sniff::mcp::SharedState;
 use hs_sniff::reasm::Reassembler;
 use hs_sniff::wire::{parse_pcap_bytes, ReplaySource};
@@ -31,6 +32,16 @@ struct Options {
     /// `market --live`: how long to wait for a complete context, in seconds.
     timeout: u64,
     json: bool,
+    /// `sweep`: directory holding runes.json / runewords.json.
+    data_dir: Option<String>,
+    /// `sweep`: milliseconds between market fetches.
+    delay: u64,
+    /// `sweep`: watchlist selectors.
+    runes: bool,
+    runewords: bool,
+    materials: bool,
+    names: Vec<String>,
+    masks: Vec<u64>,
 }
 
 fn parse_args(args: &[String]) -> Options {
@@ -44,17 +55,45 @@ fn parse_args(args: &[String]) -> Options {
         live: false,
         timeout: 30,
         json: false,
+        data_dir: None,
+        delay: 1000,
+        runes: false,
+        runewords: false,
+        materials: false,
+        names: Vec::new(),
+        masks: Vec::new(),
     };
     let mut positional: Vec<String> = Vec::new();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
-            "watch" | "replay" | "serve" | "sniff-stdin" | "market" | "context" => {
+            "watch" | "replay" | "serve" | "sniff-stdin" | "market" | "context" | "sweep" => {
                 opts.cmd = args[i].clone()
             }
             "help" | "--help" | "-h" => opts.cmd = "help".into(),
             "--live" => opts.live = true,
             "--json" => opts.json = true,
+            "--runes" => opts.runes = true,
+            "--runewords" => opts.runewords = true,
+            "--materials" => opts.materials = true,
+            "--name" if i + 1 < args.len() => {
+                opts.names.push(args[i + 1].clone());
+                i += 1;
+            }
+            "--mask" if i + 1 < args.len() => {
+                if let Ok(mask) = args[i + 1].parse::<u64>() {
+                    opts.masks.push(mask);
+                }
+                i += 1;
+            }
+            "--data-dir" if i + 1 < args.len() => {
+                opts.data_dir = Some(args[i + 1].clone());
+                i += 1;
+            }
+            "--delay" if i + 1 < args.len() => {
+                opts.delay = args[i + 1].parse().unwrap_or(1000);
+                i += 1;
+            }
             "--table" if i + 1 < args.len() => {
                 opts.table = Some(args[i + 1].clone());
                 i += 1;
@@ -396,6 +435,7 @@ fn main() {
                 }
             }
         }
+        "sweep" => run_sweep(&opts),
         "watch" => {
             #[cfg(feature = "live")]
             {
@@ -476,6 +516,232 @@ fn watch(log_path: Option<String>) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// sweep
+// ---------------------------------------------------------------------------
+
+/// Watchlist data read from the repo's `data/` directory.
+struct SweepData {
+    rune_names: Vec<String>,
+    runeword_names: Vec<String>,
+    recipes: Vec<sweep::Recipe>,
+}
+
+fn json_names(json: &str) -> Vec<String> {
+    let value: serde_json::Value = match serde_json::from_str(json) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
+    let rows = match &value {
+        serde_json::Value::Array(rows) => rows.clone(),
+        serde_json::Value::Object(map) => map
+            .values()
+            .find_map(|value| value.as_array())
+            .cloned()
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    rows.iter()
+        .filter_map(|row| row.get("name").and_then(|name| name.as_str()).map(str::to_string))
+        .collect()
+}
+
+fn load_sweep_data(dir: &str) -> Result<SweepData, String> {
+    let runes_path = std::path::Path::new(dir).join("runes.json");
+    let runewords_path = std::path::Path::new(dir).join("runewords.json");
+    let runes =
+        std::fs::read_to_string(&runes_path).map_err(|e| format!("{}: {e}", runes_path.display()))?;
+    let runewords = std::fs::read_to_string(&runewords_path)
+        .map_err(|e| format!("{}: {e}", runewords_path.display()))?;
+    let recipes = sweep::recipes_from_json(&runewords, &runes)?;
+    Ok(SweepData {
+        rune_names: json_names(&runes),
+        runeword_names: json_names(&runewords),
+        recipes,
+    })
+}
+
+fn run_sweep(opts: &Options) {
+    let session = acquire_session(opts).session;
+    if !session.can_sign() {
+        eprintln!("sweep session context incomplete: missing {}", session.missing().join(", "));
+        eprintln!("open the in-game Market once with capture running, then retry");
+        std::process::exit(3);
+    }
+
+    let data_dir = opts.data_dir.clone().unwrap_or_else(|| "../data".to_string());
+    let data = match load_sweep_data(&data_dir) {
+        Ok(data) => data,
+        Err(error) => {
+            eprintln!("error: {error}");
+            eprintln!("--data-dir must hold runes.json and runewords.json (the repo's data/)");
+            std::process::exit(2);
+        }
+    };
+
+    let catalog = MarketCatalogTable::new();
+    let default_watchlist = !opts.runes
+        && !opts.runewords
+        && !opts.materials
+        && opts.names.is_empty()
+        && opts.masks.is_empty();
+
+    let mut wanted: Vec<String> = opts.names.clone();
+    if opts.runes || default_watchlist {
+        wanted.extend(data.rune_names.iter().cloned());
+    }
+    if opts.runewords || default_watchlist {
+        wanted.extend(data.runeword_names.iter().cloned());
+    }
+    if opts.materials {
+        wanted.extend(catalog.names_of_item_type(16));
+    }
+
+    let mut targets: Vec<(String, market::MarketTarget)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for name in wanted {
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        match catalog.target_by_name(&name) {
+            Some(target) => targets.push((name, target)),
+            None => eprintln!("skip: no market identity for {name:?}"),
+        }
+    }
+    for mask in &opts.masks {
+        let name = format!("mask:{mask}");
+        if seen.insert(name.clone()) {
+            targets.push((name, market::MarketTarget::ItemMask(*mask)));
+        }
+    }
+    targets.truncate(opts.limit as usize);
+    if targets.is_empty() {
+        eprintln!("nothing to sweep");
+        std::process::exit(2);
+    }
+
+    let delay = std::time::Duration::from_millis(opts.delay);
+    eprintln!(
+        "sweeping {} items, {} recipes from {}, {}ms apart (~{}s)",
+        targets.len(),
+        data.recipes.len(),
+        data_dir,
+        opts.delay,
+        targets.len() as u64 * opts.delay / 1000
+    );
+
+    let mut books: Vec<sweep::ItemBook> = Vec::new();
+    let mut skipped: Vec<(String, String)> = Vec::new();
+    for (index, (name, target)) in targets.iter().enumerate() {
+        if index > 0 {
+            std::thread::sleep(delay);
+        }
+        let query = market::MarketQuery {
+            target: target.clone(),
+            min_sockets: None,
+            max_sockets: None,
+            stat_filters: Vec::new(),
+        };
+        let mut attempt = 0u32;
+        loop {
+            match market::fetch_market(&session, &query) {
+                Ok(result) => {
+                    match sweep::ItemBook::from_listings(name.clone(), &result.listings) {
+                        Some(book) => books.push(book),
+                        None => skipped.push((name.clone(), "nothing on sale".into())),
+                    }
+                    break;
+                }
+                Err(market::MarketError::ServerRejected(reason))
+                    if reason == "rate-limit" && attempt < 2 =>
+                {
+                    attempt += 1;
+                    let backoff = delay * 10 * attempt;
+                    eprintln!("rate limited on {name}; backing off {}s", backoff.as_secs());
+                    std::thread::sleep(backoff);
+                }
+                Err(error) => {
+                    skipped.push((name.clone(), error.to_string()));
+                    break;
+                }
+            }
+        }
+        eprintln!("[{}/{}] {name}", index + 1, targets.len());
+    }
+
+    let signals = sweep::analyze(&books, &data.recipes, sweep::Thresholds::default());
+    if opts.json {
+        let payload = serde_json::json!({
+            "books": books.iter().map(|book| book.to_json()).collect::<Vec<_>>(),
+            "signals": signals.iter().map(|signal| signal.to_json()).collect::<Vec<_>>(),
+            "skipped": skipped.iter()
+                .map(|(item, reason)| serde_json::json!({"item": item, "reason": reason}))
+                .collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+        return;
+    }
+    print_sweep_table(&books, &signals, &skipped);
+}
+
+fn print_sweep_table(
+    books: &[sweep::ItemBook],
+    signals: &[sweep::Signal],
+    skipped: &[(String, String)],
+) {
+    println!(
+        "{:<22} {:>6} {:>5} {:>6} {:>10} {:>10} {:>10} {:>7}",
+        "item", "levels", "asks", "units", "ask", "next", "centre", "cliff"
+    );
+    let mut rows: Vec<&sweep::ItemBook> = books.iter().collect();
+    rows.sort_by_key(|book| book.best_ask().map(|level| level.unit_price).unwrap_or(i64::MAX));
+    for book in rows {
+        let cell = |value: Option<i64>| value.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
+        println!(
+            "{:<22} {:>6} {:>5} {:>6} {:>10} {:>10} {:>10} {:>7}",
+            book.name,
+            book.listing_levels(),
+            book.listings(),
+            book.total_units(),
+            cell(book.best_ask().map(|level| level.unit_price)),
+            cell(book.next_ask().map(|level| level.unit_price)),
+            cell(book.price_centre()),
+            book.cliff().map(|c| format!("{:.0}%", c * 100.0)).unwrap_or_else(|| "-".into()),
+        );
+    }
+
+    println!("\nSIGNALS");
+    if signals.is_empty() {
+        println!("  none — every book is tightly priced");
+    }
+    for signal in signals {
+        match signal {
+            sweep::Signal::CraftMargin { name, item_ask, rune_cost, gap, crafts, total, .. } => println!(
+                "  CRAFT MARGIN {name:<20} runes {rune_cost:>9}  item {item_ask:>9}  +{gap:>9}  x{crafts} = {total:>10}"
+            ),
+            sweep::Signal::Cliff { name, ask, next, gap, units } => println!(
+                "  CLIFF        {name:<20} ask {ask:>9}  next {next:>9}  +{:.0}%  depth {units}",
+                gap * 100.0
+            ),
+            sweep::Signal::BelowCentre { name, ask, centre, ratio } => println!(
+                "  BELOW CENTRE {name:<20} ask {ask:>9}  centre {centre:>9}  ({:.0}% of centre)",
+                ratio * 100.0
+            ),
+            sweep::Signal::CheaperThanRunes { name, item_ask, rune_cost, gap } => println!(
+                "  DON'T CRAFT  {name:<20} runes {rune_cost:>9}  item {item_ask:>9}  item is {gap} cheaper"
+            ),
+        }
+    }
+
+    if !skipped.is_empty() {
+        println!("\nno listings / errors ({}):", skipped.len());
+        for (name, reason) in skipped {
+            println!("  {name:<22} {reason}");
+        }
+    }
+    println!("\nprices are per unit; `cliff` is how far the best ask sits below the next level.");
+}
+
 fn print_help() {
     println!(
         "hs-sniff — passive Hero Siege traffic reader
@@ -491,11 +757,20 @@ USAGE:
   hs-sniff market \"QUERY\" --replay FILE | --live [--timeout SECS] [--json]
                                 live market prices for a plain-text query, e.g.
                                 \"2 socket Harlequinn's Crest\", \"Grief\", \"min 2 sockets mask:1234\"
+  hs-sniff sweep [--runes] [--runewords] [--materials] [--name ITEM] [--mask N]
+                 --replay FILE | --live [--timeout SECS]
+                 [--data-dir DIR] [--delay MS] [--limit N] [--json]
+                                sweep fungible items and report structural mispricings
+                                (default watchlist: runes + runewords)
   hs-sniff --table ITEMS.tsv replay FILE
                                 load a name/rarity table (type<TAB>id<TAB>wt<TAB>name<TAB>rarity)
 
 The game is read passively: nothing is injected, nothing is decrypted. The
 market is HTTPS, so `market` re-issues the game's own query using the session
-context it sniffed — the game must have opened its Market once while capturing."
+context it sniffed — the game must have opened its Market once while capturing.
+
+`sweep` treats each item as an order book and reports on **unit** prices: `price`
+is a stack total, so banding it (as the game's own avgPrice does) compares
+stacks of different sizes. A dense book should produce no signal."
     );
 }

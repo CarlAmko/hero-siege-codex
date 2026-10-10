@@ -18,11 +18,12 @@ src/reasm.rs      TCP flow reassembly (per flow+ack buffers, carry-over tail)
 src/decode.rs     protocol decode: JSON scan, base64 blobs, query strings
 src/events.rs     normalized GameEvents: gold, xp, kills, drops, zone, mail…
 src/market.rs     market client: session context, checksum, query parse, prices
+src/sweep.rs      order-book analysis: unit prices, depth weighting, craft margins
 src/wire.rs       pcap file reader + jsonl flush log (replay/testing)
 src/capture.rs    live capture (feature `live`): process discovery + BPF scoping
 src/mcp.rs        MCP stdio server (hand-rolled JSON-RPC)
 src/itemtable.rs  optional (type,id,weaponType) -> name/rarity table loader
-src/main.rs       CLI: watch / replay / sniff-stdin / context / market / serve
+src/main.rs       CLI: watch / replay / sniff-stdin / context / market / sweep / serve
 data/             generated market catalogs (names -> masks, runewords, stats)
 tools/            gen-market-catalog.mjs — regenerates data/ from the Companion
 ```
@@ -141,6 +142,62 @@ an old capture is rejected by the server as a checksum failure; capture fresh.
   *requests* are plaintext on the game's other ports; the market *responses*
   come back over HTTPS and are never readable passively, which is why `market`
   re-issues the query instead of snooping the answer.
+
+## Sweeping for mispricings
+
+`market` answers one query. `sweep` walks a watchlist of fungible items and
+reports what is structurally wrong with each book:
+
+```bash
+# Runes + runewords (the default watchlist), context read from a capture
+hs-sniff sweep --replay session.jsonl
+
+# A whole bucket, or explicit items
+hs-sniff sweep --replay session.jsonl --materials
+hs-sniff sweep --replay session.jsonl --name Mal --name Malice --mask 1073741824
+
+# Machine-readable, with pacing
+hs-sniff sweep --replay session.jsonl --delay 800 --json > sweep.json
+```
+
+**Everything is per unit.** `price` is the *stack total*: half the live rune rows
+have `price != unit_price`, and a 13-unit stack of Mal at 24,500/unit reports
+`price = 318,500`. Banding `price` — which the game's own `avgPrice` does —
+averages stacks of different sizes and invents spreads that aren't there. Sorting
+by it is worse: the true cheapest unit can sit *above* a smaller stack.
+
+Each item is treated as an **order book**, and for a fungible one page is the
+whole book (a tier-2 rune returns 62 listings and the next page is empty). The
+ladder is grouped into price levels and weighted by units, so a 13-unit stack is
+13 supply rather than one vote. The fair-value reference is the median across
+*levels*, not across units: unit-weighting alone lets one huge expensive stack
+drag the centre up and invent a discount for the ask.
+
+Signals, in output order:
+
+| Signal | Meaning |
+|---|---|
+| `CRAFT MARGIN` | The runes to build a runeword cost less than the runeword sells for. **The actionable direction** — runes are consumed by crafting and cannot be extracted again, so the reverse is not a trade. |
+| `CLIFF` | The best ask sits well below the next level. Depth is shown: a 700% cliff on a single unit is a snipe, not a business. |
+| `BELOW CENTRE` | The best ask sits far below the book's own middle. Suppressed when a cliff already explains it. |
+| `DON'T CRAFT` | The runeword is cheaper than its runes — information, not an opportunity. |
+
+Craft margins are ranked by **capturable profit** (`gap × crafts`), not by
+percentage. `crafts` is bounded by the shallowest ingredient's depth *and* by the
+runeword book's own supply, so a 34,000% margin you could only ever run eight
+times ranks below a 74% margin worth five million. A runeword with a single
+listing is skipped outright: one seller's ask is not a market price.
+
+Two things the margin does **not** include: the socketed base item, and the
+market's sale tax (the client prints a `Market Tax value:` readout). Both reduce
+it, so treat the figures as an upper bound.
+
+Pacing is `--delay` milliseconds between fetches (default 1000; a full
+runes+runewords sweep is ~128 items and about three minutes). A rate-limit
+rejection backs off and retries instead of aborting. `--data-dir` (default
+`../data`) must hold `runes.json` and `runewords.json` for the ingredient lists;
+names resolve through the bundled catalog. Runeword queries omit `filter_masks`
+entirely — an explicit empty array is an HTTP 500.
 
 ## Item names
 
