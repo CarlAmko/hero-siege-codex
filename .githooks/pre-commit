@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pre-commit guardrail: run scripts/check.sh before every commit.
+#
+# Enable once per clone (hooks are not versioned):
+#   git config core.hooksPath .githooks
+set -e
+exec "$(git rev-parse --show-toplevel)/scripts/check.sh"

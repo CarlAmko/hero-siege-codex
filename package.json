@@ -19,7 +19,10 @@
     "social:ingest": "node bin/hs-social.js ingest",
     "social:snapshot": "node bin/hs-social.js snapshot",
     "social:mcp": "node bin/hs-social-mcp.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:rust": "cargo test --manifest-path hs-sniff/Cargo.toml",
+    "test:all": "npm test && npm run test:rust",
+    "guardrail": "sh scripts/check.sh"
   },
   "keywords": [
     "hero-siege",

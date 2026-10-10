@@ -118,6 +118,30 @@ queries, with a **30-second result cache** so an identical query inside the
 window is served from memory. The long-lived MCP server shares one client, so
 the cooldown is per-process; the one-shot CLI starts fresh each time.
 
+### Priming the session context
+
+A query needs the six fields the client signs its own requests with. They are
+not on a timer — the game only emits them when it makes a signed request, so
+**open the in-game Market once (or do a vote/instance reset) while capturing**.
+`hs-sniff context --live` and `market --live` print which fields are still
+missing. `crossregion_identifier` rotates every session, so a context read from
+an old capture is rejected by the server as a checksum failure; capture fresh.
+
+### Capturing under Steam / Proton (Linux)
+
+- Rights: `cap_net_raw` on the binary (`sudo setcap cap_net_raw+eip hs-sniff`)
+  or run as root, the same as tcpdump. Windows needs Npcap.
+- The game is a Windows executable under Proton; its process shows up as
+  `Hero_Siege.exe` and the crate's process matcher accounts for that.
+- The sniffer scopes the BPF filter to the game's own TCP connections. When it
+  cannot identify the process it falls back to all TCP and says so in `watch`'s
+  status line (`bad filter:` / `note:`), which is the first thing to check when
+  no events decode.
+- **Port 443 is skipped by design** — it is TLS. Gameplay JSON and the market
+  *requests* are plaintext on the game's other ports; the market *responses*
+  come back over HTTPS and are never readable passively, which is why `market`
+  re-issues the query instead of snooping the answer.
+
 ## Item names
 
 hs-tracker resolves `(type, id, weaponType)` to a name through 1,491
