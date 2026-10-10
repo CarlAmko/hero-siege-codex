@@ -199,6 +199,32 @@ rejection backs off and retries instead of aborting. `--data-dir` (default
 names resolve through the bundled catalog. Runeword queries omit `filter_masks`
 entirely — an explicit empty array is an HTTP 500.
 
+### Realised prices, inferred from what disappears
+
+The game exposes no market-wide transactions: `market_fetch_history` and
+`market_fetch_sell` are your own basket only. So every sweep appends one row per
+observed listing to a JSONL corpus and diffs it against the previous sweep:
+
+```json
+{"item":"Mal","market_id":10635905,"price":7333,"ts":1791651427482,"unit_price":7333,"units":1}
+```
+
+| | |
+|---|---|
+| `--observations FILE` | corpus path (default `../data/market-observations.jsonl`, gitignored) |
+| `--no-observations` | skip recording and diffing entirely |
+
+Keyed on the monotonic `market_id`, so each sweep reports three things:
+**appeared** (new listings), **repriced**, and **gone** — the last observed price
+of a listing that is no longer on sale, folded per item into an inferred-sale
+view. A vanished listing may have sold, been cancelled, or simply expired at
+midnight, so treat it as a proxy rather than a trade feed; it is nonetheless the
+only market-wide evidence of a transaction the game gives you.
+
+The diff is scoped to the items being swept this run, so dropping an item from
+the watchlist does not read as all of its listings having sold. No seller
+identity is stored — the corpus holds derived facts only.
+
 ## Item names
 
 hs-tracker resolves `(type, id, weaponType)` to a name through 1,491

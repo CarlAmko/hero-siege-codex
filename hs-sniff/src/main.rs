@@ -42,6 +42,10 @@ struct Options {
     materials: bool,
     names: Vec<String>,
     masks: Vec<u64>,
+    /// `sweep`: JSONL corpus of observed listings.
+    observations: Option<String>,
+    /// `sweep`: skip recording and diffing altogether.
+    no_observations: bool,
 }
 
 fn parse_args(args: &[String]) -> Options {
@@ -62,6 +66,8 @@ fn parse_args(args: &[String]) -> Options {
         materials: false,
         names: Vec::new(),
         masks: Vec::new(),
+        observations: None,
+        no_observations: false,
     };
     let mut positional: Vec<String> = Vec::new();
     let mut i = 0;
@@ -94,6 +100,11 @@ fn parse_args(args: &[String]) -> Options {
                 opts.delay = args[i + 1].parse().unwrap_or(1000);
                 i += 1;
             }
+            "--observations" if i + 1 < args.len() => {
+                opts.observations = Some(args[i + 1].clone());
+                i += 1;
+            }
+            "--no-observations" => opts.no_observations = true,
             "--table" if i + 1 < args.len() => {
                 opts.table = Some(args[i + 1].clone());
                 i += 1;
@@ -632,6 +643,29 @@ fn run_sweep(opts: &Options) {
 
     let mut books: Vec<sweep::ItemBook> = Vec::new();
     let mut skipped: Vec<(String, String)> = Vec::new();
+    let mut observations: Vec<sweep::Observation> = Vec::new();
+
+    // The corpus is the diff baseline: the previous sweep's state is the most
+    // recent row per listing id. Read before appending, so the current sweep
+    // never diffs against itself.
+    let observations_path = opts
+        .observations
+        .clone()
+        .unwrap_or_else(|| "../data/market-observations.jsonl".to_string());
+    let previous = if opts.no_observations {
+        Vec::new()
+    } else {
+        // Only diff items we are sweeping this run: dropping an item from the
+        // watchlist would otherwise read as all of its listings having sold.
+        let watched: std::collections::HashSet<&str> =
+            targets.iter().map(|(name, _)| name.as_str()).collect();
+        sweep::latest_state(&read_observations(&observations_path))
+            .into_iter()
+            .filter(|row| watched.contains(row.item.as_str()))
+            .collect()
+    };
+    let had_baseline = !previous.is_empty();
+    let ts = now_ms();
     for (index, (name, target)) in targets.iter().enumerate() {
         if index > 0 {
             std::thread::sleep(delay);
@@ -646,6 +680,9 @@ fn run_sweep(opts: &Options) {
         loop {
             match market::fetch_market(&session, &query) {
                 Ok(result) => {
+                    for row in &result.listings {
+                        observations.push(sweep::Observation::from_listing(ts, name, row));
+                    }
                     match sweep::ItemBook::from_listings(name.clone(), &result.listings) {
                         Some(book) => books.push(book),
                         None => skipped.push((name.clone(), "nothing on sale".into())),
@@ -670,6 +707,15 @@ fn run_sweep(opts: &Options) {
     }
 
     let signals = sweep::analyze(&books, &data.recipes, sweep::Thresholds::default());
+    let delta = sweep::diff_observations(&previous, &observations);
+    if !opts.no_observations {
+        match append_observations(&observations_path, &observations) {
+            Ok(()) => {
+                eprintln!("recorded {} listings to {observations_path}", observations.len())
+            }
+            Err(error) => eprintln!("warning: could not record observations: {error}"),
+        }
+    }
     if opts.json {
         let payload = serde_json::json!({
             "books": books.iter().map(|book| book.to_json()).collect::<Vec<_>>(),
@@ -677,11 +723,89 @@ fn run_sweep(opts: &Options) {
             "skipped": skipped.iter()
                 .map(|(item, reason)| serde_json::json!({"item": item, "reason": reason}))
                 .collect::<Vec<_>>(),
+            "observations": {
+                "path": if opts.no_observations {
+                    serde_json::Value::Null
+                } else {
+                    serde_json::json!(observations_path)
+                },
+                "baseline": had_baseline,
+                "recorded": observations.len(),
+            },
+            "delta": delta.to_json(),
         });
         println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
         return;
     }
     print_sweep_table(&books, &signals, &skipped);
+    if !opts.no_observations {
+        print_changes(&delta, had_baseline);
+    }
+}
+
+/// Read the observation corpus, tolerating a torn final line.
+fn read_observations(path: &str) -> Vec<sweep::Observation> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter_map(|value| sweep::Observation::from_json(&value))
+        .collect()
+}
+
+fn append_observations(path: &str, rows: &[sweep::Observation]) -> Result<(), String> {
+    use std::io::Write;
+    if let Some(parent) = std::path::Path::new(path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|e| format!("{path}: {e}"))?;
+    for row in rows {
+        writeln!(file, "{}", row.to_json()).map_err(|e| format!("{path}: {e}"))?;
+    }
+    Ok(())
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// What left the market since the last sweep. A vanished listing may have sold,
+/// been cancelled, or simply expired — the game exposes no trade feed, so this
+/// is the only market-wide evidence there is.
+fn print_changes(delta: &sweep::Delta, had_baseline: bool) {
+    println!("\nCHANGES");
+    if !had_baseline {
+        println!("  first sweep — recorded as the baseline, nothing to diff against");
+        return;
+    }
+    let sales = delta.vanished_by_item();
+    if sales.is_empty() {
+        println!("  nothing left the market");
+    } else {
+        println!("  gone since last sweep (sold, cancelled or expired):");
+        for stat in sales.iter().take(12) {
+            println!(
+                "    {:<22} {:>3} listings {:>7} units  median {:>9}  top {:>9}",
+                stat.item, stat.count, stat.units, stat.median_unit_price, stat.highest_unit_price
+            );
+        }
+    }
+    println!(
+        "  new listings: {}   repriced: {}",
+        delta.appeared.len(),
+        delta.repriced.len()
+    );
 }
 
 fn print_sweep_table(
@@ -760,6 +884,7 @@ USAGE:
   hs-sniff sweep [--runes] [--runewords] [--materials] [--name ITEM] [--mask N]
                  --replay FILE | --live [--timeout SECS]
                  [--data-dir DIR] [--delay MS] [--limit N] [--json]
+                 [--observations FILE] [--no-observations]
                                 sweep fungible items and report structural mispricings
                                 (default watchlist: runes + runewords)
   hs-sniff --table ITEMS.tsv replay FILE

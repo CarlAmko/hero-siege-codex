@@ -432,12 +432,188 @@ fn rows_of(value: &Value) -> Vec<&Value> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Observations: what was on sale, and what happened to it
+// ---------------------------------------------------------------------------
+
+/// One listing seen in one sweep, as stored in the corpus.
+///
+/// The game exposes no market-wide transactions — `market_fetch_history` and
+/// `market_fetch_sell` are your own basket only — so realised prices can only be
+/// inferred by watching listings disappear. No seller identity is stored: the
+/// corpus holds derived facts, like the social one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Observation {
+    pub ts: u64,
+    pub item: String,
+    pub market_id: u64,
+    pub unit_price: i64,
+    pub units: u64,
+    pub price: i64,
+}
+
+impl Observation {
+    pub fn from_listing(ts: u64, item: &str, row: &MarketListing) -> Self {
+        Observation {
+            ts,
+            item: item.to_string(),
+            market_id: row.market_id,
+            unit_price: row.unit_price_gold(),
+            units: row.units,
+            price: row.price,
+        }
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "ts": self.ts, "item": self.item, "market_id": self.market_id,
+            "unit_price": self.unit_price, "units": self.units, "price": self.price,
+        })
+    }
+
+    pub fn from_json(value: &Value) -> Option<Self> {
+        Some(Observation {
+            ts: value.get("ts").and_then(Value::as_u64).unwrap_or(0),
+            item: value.get("item").and_then(Value::as_str)?.to_string(),
+            market_id: value.get("market_id").and_then(Value::as_u64)?,
+            unit_price: value.get("unit_price").and_then(Value::as_i64).unwrap_or(0),
+            units: value.get("units").and_then(Value::as_u64).unwrap_or(1),
+            price: value.get("price").and_then(Value::as_i64).unwrap_or(0),
+        })
+    }
+}
+
+/// The most recent observation per listing id — the state a sweep diffs against.
+pub fn latest_state(rows: &[Observation]) -> Vec<Observation> {
+    let mut latest: BTreeMap<u64, &Observation> = BTreeMap::new();
+    for row in rows {
+        match latest.get(&row.market_id) {
+            Some(existing) if existing.ts >= row.ts => {}
+            _ => {
+                latest.insert(row.market_id, row);
+            }
+        }
+    }
+    latest.into_values().cloned().collect()
+}
+
+/// What changed between two sweeps of the same watchlist.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Delta {
+    /// Listing ids that were not on sale in the previous sweep.
+    pub appeared: Vec<Observation>,
+    /// Listing ids that were on sale before and are not now: sold, cancelled or
+    /// expired. This is the only market-wide evidence of a transaction there is.
+    pub vanished: Vec<Observation>,
+    /// Still on sale at a different unit price: `(previous, current)`.
+    pub repriced: Vec<(Observation, Observation)>,
+}
+
+impl Delta {
+    pub fn is_empty(&self) -> bool {
+        self.appeared.is_empty() && self.vanished.is_empty() && self.repriced.is_empty()
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "appeared": self.appeared.iter().map(Observation::to_json).collect::<Vec<_>>(),
+            "vanished": self.vanished.iter().map(Observation::to_json).collect::<Vec<_>>(),
+            "repriced": self.repriced.iter()
+                .map(|(before, after)| json!({"before": before.to_json(), "after": after.to_json()}))
+                .collect::<Vec<_>>(),
+        })
+    }
+
+    /// Disappearances folded per item — the inferred-sale view. A vanished
+    /// listing may have been delisted or expired at midnight rather than sold,
+    /// so this is a proxy, not a trade feed.
+    pub fn vanished_by_item(&self) -> Vec<VanishedStat> {
+        let mut by_item: BTreeMap<&str, Vec<&Observation>> = BTreeMap::new();
+        for row in &self.vanished {
+            by_item.entry(row.item.as_str()).or_default().push(row);
+        }
+        let mut stats: Vec<VanishedStat> = by_item
+            .into_iter()
+            .map(|(item, rows)| {
+                let mut prices: Vec<i64> = rows.iter().map(|row| row.unit_price).collect();
+                prices.sort_unstable();
+                VanishedStat {
+                    item: item.to_string(),
+                    count: rows.len(),
+                    units: rows.iter().map(|row| row.units).sum(),
+                    median_unit_price: prices[prices.len() / 2],
+                    highest_unit_price: prices[prices.len() - 1],
+                }
+            })
+            .collect();
+        // Heaviest disappearance first: units are what left the market.
+        stats.sort_by_key(|stat| std::cmp::Reverse(stat.units));
+        stats
+    }
+}
+
+/// A vanished listing's last observed price, per item.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VanishedStat {
+    pub item: String,
+    pub count: usize,
+    pub units: u64,
+    pub median_unit_price: i64,
+    pub highest_unit_price: i64,
+}
+
+impl VanishedStat {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "item": self.item, "count": self.count, "units": self.units,
+            "median_unit_price": self.median_unit_price,
+            "highest_unit_price": self.highest_unit_price,
+        })
+    }
+}
+
+/// Diff two sweeps of the same watchlist, keyed by listing id.
+pub fn diff_observations(previous: &[Observation], current: &[Observation]) -> Delta {
+    let before: BTreeMap<u64, &Observation> =
+        previous.iter().map(|row| (row.market_id, row)).collect();
+    let after: BTreeMap<u64, &Observation> =
+        current.iter().map(|row| (row.market_id, row)).collect();
+
+    let mut delta = Delta::default();
+    for (id, row) in &after {
+        match before.get(id) {
+            None => delta.appeared.push((*row).clone()),
+            Some(old) if old.unit_price != row.unit_price => {
+                delta.repriced.push(((*old).clone(), (*row).clone()));
+            }
+            Some(_) => {}
+        }
+    }
+    for (id, row) in &before {
+        if !after.contains_key(id) {
+            delta.vanished.push((*row).clone());
+        }
+    }
+    delta
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn listing(price: i64, unit_price: Option<f64>, units: u64) -> MarketListing {
-        MarketListing { price, unit_price, units }
+        MarketListing { price, unit_price, units, market_id: 0 }
+    }
+
+    fn obs(ts: u64, item: &str, market_id: u64, unit_price: i64, units: u64) -> Observation {
+        Observation {
+            ts,
+            item: item.to_string(),
+            market_id,
+            unit_price,
+            units,
+            price: unit_price * units as i64,
+        }
     }
 
     #[test]
@@ -630,6 +806,70 @@ mod tests {
             ingredients: vec!["Uth".into(), "Ol".into()],
         }];
         assert!(analyze(&books, &recipes, Thresholds::default()).is_empty());
+    }
+
+    #[test]
+    fn latest_state_keeps_the_newest_row_per_listing() {
+        let rows = vec![
+            obs(100, "Mal", 1, 7_000, 1),
+            obs(200, "Mal", 1, 6_750, 1),
+            obs(150, "Mal", 2, 7_333, 4),
+        ];
+        let latest = latest_state(&rows);
+        assert_eq!(latest.len(), 2);
+        let one = latest.iter().find(|row| row.market_id == 1).unwrap();
+        assert_eq!((one.ts, one.unit_price), (200, 6_750));
+    }
+
+    #[test]
+    fn the_diff_finds_appeared_vanished_and_repriced() {
+        let before = vec![
+            obs(100, "Mal", 1, 7_000, 1),
+            obs(100, "Mal", 2, 8_000, 1),
+            obs(100, "Sur", 9, 36_000, 1),
+        ];
+        let after = vec![
+            obs(200, "Mal", 1, 6_500, 1),  // repriced
+            obs(200, "Mal", 3, 9_000, 1),  // new
+            obs(200, "Sur", 9, 36_000, 1), // unchanged
+        ];
+        let delta = diff_observations(&before, &after);
+        assert_eq!(delta.appeared.len(), 1);
+        assert_eq!(delta.appeared[0].market_id, 3);
+        assert_eq!(delta.vanished.len(), 1);
+        assert_eq!(delta.vanished[0].market_id, 2);
+        assert_eq!(delta.repriced.len(), 1);
+        assert_eq!(delta.repriced[0].0.unit_price, 7_000);
+        assert_eq!(delta.repriced[0].1.unit_price, 6_500);
+        assert!(!delta.is_empty());
+        assert!(diff_observations(&after, &after).is_empty());
+    }
+
+    #[test]
+    fn vanished_listings_fold_into_inferred_sales_per_item() {
+        let before = vec![
+            obs(100, "Mal", 1, 6_750, 1),
+            obs(100, "Mal", 2, 7_333, 4),
+            obs(100, "Mal", 3, 25_000, 13),
+            obs(100, "Sur", 9, 36_000, 1),
+        ];
+        let after = vec![obs(200, "Sur", 9, 36_000, 1)];
+        let stats = diff_observations(&before, &after).vanished_by_item();
+        assert_eq!(stats.len(), 1, "Sur did not vanish");
+        let mal = &stats[0];
+        assert_eq!(mal.item, "Mal");
+        assert_eq!(mal.count, 3);
+        assert_eq!(mal.units, 18);
+        assert_eq!(mal.median_unit_price, 7_333);
+        assert_eq!(mal.highest_unit_price, 25_000);
+    }
+
+    #[test]
+    fn observations_round_trip_through_json() {
+        let row = obs(1_791_647_075_521, "Harlequinn's Crest", 10_614_880, 3_500, 2);
+        let back = Observation::from_json(&row.to_json()).unwrap();
+        assert_eq!(back, row);
+        assert!(Observation::from_json(&json!({"item": "no id"})).is_none());
     }
 
     #[test]

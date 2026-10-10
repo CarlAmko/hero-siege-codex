@@ -23,3 +23,7 @@ Thumbs.db
 data/social-signals.jsonl
 data/social-signals.jsonl.*
 !data/social-signals.jsonl.gz
+
+# Market observation corpus written by `hs-sniff sweep`. Append-only history of
+# every listing seen; grows with each sweep, so it is not committed.
+data/market-observations.jsonl

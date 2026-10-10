@@ -361,6 +361,9 @@ pub struct MarketListing {
     /// Units in this listing. The server only sometimes labels it, so it is
     /// otherwise derived from `price / unit_price` and defaults to 1.
     pub units: u64,
+    /// Server-side listing id. Monotonic, so it doubles as a recency key and is
+    /// what the observation corpus diffs on to infer sales. 0 when absent.
+    pub market_id: u64,
 }
 
 impl MarketListing {
@@ -426,7 +429,8 @@ impl MarketResult {
     pub fn to_json(&self) -> Value {
         json!({
             "listings": self.listings.iter()
-                .map(|row| json!({"price": row.price, "unit_price": row.unit_price, "units": row.units}))
+                .map(|row| json!({"market_id": row.market_id, "price": row.price,
+                                 "unit_price": row.unit_price, "units": row.units}))
                 .collect::<Vec<_>>(),
             "total_matches": self.total_matches,
             "returned_count": self.returned_count,
@@ -494,7 +498,8 @@ pub fn parse_market_response(body: &[u8], status: u16) -> Result<MarketResult, M
                 (n >= 1.0 && exact).then_some(n as u64)
             })
             .unwrap_or(1);
-        listings.push(MarketListing { price, unit_price, units });
+        let market_id = object.get("market_id").and_then(Value::as_u64).unwrap_or(0);
+        listings.push(MarketListing { price, unit_price, units, market_id });
     }
     let total_matches = object.get("itemCount").and_then(Value::as_u64);
     Ok(MarketResult { listings, total_matches, returned_count })
